@@ -84,6 +84,18 @@ function dealDominoes(game: GameState): void {
   });
 }
 
+function resetRound(game: GameState): void {
+  game.board = [];
+  game.boardLeftEnd = -1;
+  game.boardRightEnd = -1;
+  game.passCount = 0;
+  game.winner = null;
+  game.scores = { team1: 0, team2: 0 };
+  game.players.forEach((player) => {
+    player.hand = [];
+  });
+}
+
 function findStartingPlayer(game: GameState): number {
   // Find player with double 6, then double 5, etc.
   for (let double = 6; double >= 0; double--) {
@@ -516,7 +528,9 @@ app.prepare().then(() => {
         return;
       }
 
-      if (game.gamePhase !== "waiting") {
+      if (game.gamePhase === "finished") {
+        resetRound(game);
+      } else if (game.gamePhase !== "waiting") {
         socket.emit("error", "Game already started!");
         return;
       }

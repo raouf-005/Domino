@@ -285,12 +285,14 @@ export default function GamePage() {
   const [joined, setJoined] = useState(false);
   const [selectedDomino, setSelectedDomino] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<
     { playerName: string; message: string }[]
   >([]);
   const [chatInput, setChatInput] = useState("");
   const [gameMode, setGameMode] = useState<GameMode>("multiplayer");
   const [aiDifficulty, setAIDifficulty] = useState<AIDifficulty>("medium");
+  const [connectionKey, setConnectionKey] = useState(0);
 
   useEffect(() => {
     const newSocket: GameSocket = io({
@@ -316,7 +318,23 @@ export default function GamePage() {
     return () => {
       newSocket.disconnect();
     };
+  }, [connectionKey]);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000);
   }, []);
+
+  const leaveMatch = useCallback(() => {
+    socket?.disconnect();
+    setSocket(null);
+    setJoined(false);
+    setGameState(null);
+    setSelectedDomino(null);
+    setChatMessages([]);
+    setError(null);
+    setConnectionKey((k) => k + 1);
+  }, [socket]);
 
   const joinGame = useCallback(() => {
     if (!socket || !playerName.trim() || !gameId.trim()) return;
@@ -366,6 +384,16 @@ export default function GamePage() {
     });
     setChatInput("");
   }, [socket, gameState, chatInput]);
+
+  const copyRoomCode = useCallback(async () => {
+    if (!gameState?.id) return;
+    try {
+      await navigator.clipboard.writeText(gameState.id);
+      showToast("Room code copied");
+    } catch {
+      showToast("Copy failed");
+    }
+  }, [gameState?.id, showToast]);
 
   const currentPlayer = gameState?.players.find((p) => p.id === socket?.id);
   const isMyTurn =
@@ -663,6 +691,18 @@ export default function GamePage() {
             </motion.div>
           )}
         </AnimatePresence>
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -40, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -40, scale: 0.95 }}
+              className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-white px-6 py-2 rounded-full shadow-xl font-semibold"
+            >
+              {toast}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Header */}
         <motion.div
@@ -704,6 +744,20 @@ export default function GamePage() {
                 {gameState?.scores.team2 || 0}
               </p>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={copyRoomCode}
+              className="px-4 py-2 rounded-xl bg-white/10 text-white font-semibold border border-white/10 hover:bg-white/20 transition"
+            >
+              Copy Room
+            </button>
+            <button
+              onClick={leaveMatch}
+              className="px-4 py-2 rounded-xl bg-red-500/80 text-white font-semibold hover:bg-red-600 transition"
+            >
+              Leave Match
+            </button>
           </div>
         </motion.div>
 
@@ -809,6 +863,24 @@ export default function GamePage() {
                   {gameState.scores.team2} pts
                 </p>
               </motion.div>
+            </div>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={startGame}
+                className="px-10 py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-2xl font-bold text-lg shadow-2xl"
+              >
+                Play Another Round
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={leaveMatch}
+                className="px-10 py-4 bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-2xl font-bold text-lg shadow-2xl"
+              >
+                Leave Match
+              </motion.button>
             </div>
           </motion.div>
         ) : (
