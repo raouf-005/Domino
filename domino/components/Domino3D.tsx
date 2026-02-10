@@ -142,12 +142,14 @@ function useSnakeLayout(board: Domino[]) {
         }
       }
 
-      // Flat on table, face up.  Doubles: vertical (no Z-rotation), others: horizontal (90-deg Z)
-      const rotY = 0;
-      const rotZ = isDouble ? 0 : Math.PI / 2;
+      // Flat on table, face up.
+      // Doubles: vertical crossbar (no extra Y-rotation).
+      // Non-doubles: Y-rotation follows the snake direction so
+      //   domino.left faces the previous piece and domino.right faces the next.
+      const rotZ = isDouble ? 0 : dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       items.push({
         pos: [x, 0.1, z],
-        rot: [-Math.PI / 2, rotY, rotZ],
+        rot: [-Math.PI / 2, 0, rotZ],
         isDouble,
       });
 
