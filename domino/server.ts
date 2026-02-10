@@ -6,6 +6,8 @@ import {
   Player,
   Domino,
   Team,
+  GameMode,
+  AIDifficulty,
   generateDominoes,
   shuffle,
   canPlayDomino,
@@ -26,7 +28,19 @@ const handler = app.getRequestHandler();
 const games: Map<string, GameState> = new Map();
 const playerSockets: Map<string, string> = new Map(); // socketId -> playerId
 
-function createGame(gameId: string): GameState {
+// AI Names
+const AI_NAMES = [
+  "🤖 Bot Alpha",
+  "🤖 Bot Beta",
+  "🤖 Bot Gamma",
+  "🤖 Bot Delta",
+];
+
+function createGame(
+  gameId: string,
+  gameMode: GameMode = "multiplayer",
+  aiDifficulty: AIDifficulty = "medium",
+): GameState {
   return {
     id: gameId,
     players: [],
@@ -39,6 +53,25 @@ function createGame(gameId: string): GameState {
     lastAction: "Waiting for players...",
     passCount: 0,
     scores: { team1: 0, team2: 0 },
+    gameMode,
+    aiDifficulty,
+  };
+}
+
+function createAIPlayer(
+  name: string,
+  team: Team,
+  difficulty: AIDifficulty,
+): Player {
+  return {
+    id: `ai-${uuidv4()}`,
+    name,
+    team,
+    hand: [],
+    isReady: true,
+    isConnected: true,
+    isAI: true,
+    aiDifficulty: difficulty,
   };
 }
 
@@ -122,6 +155,202 @@ function checkGameOver(game: GameState): boolean {
   return false;
 }
 
+// AI Logic Functions
+function getPlayableDominoes(
+  hand: Domino[],
+  leftEnd: number,
+  rightEnd: number,
+  boardEmpty: boolean,
+): { domino: Domino; sides: ("left" | "right")[] }[] {
+  const playable: { domino: Domino; sides: ("left" | "right")[] }[] = [];
+
+  for (const domino of hand) {
+    const { canPlay, sides } = canPlayDomino(
+      domino,
+      leftEnd,
+      rightEnd,
+      boardEmpty,
+    );
+    if (canPlay) {
+      playable.push({ domino, sides });
+    }
+  }
+
+  return playable;
+}
+
+function aiSelectMove(
+  game: GameState,
+  player: Player,
+): { domino: Domino; side: "left" | "right" } | null {
+  const boardEmpty = game.board.length === 0;
+  const playable = getPlayableDominoes(
+    player.hand,
+    game.boardLeftEnd,
+    game.boardRightEnd,
+    boardEmpty,
+  );
+
+  if (playable.length === 0) return null;
+
+  const difficulty = player.aiDifficulty || "medium";
+
+  if (difficulty === "easy") {
+    // Easy: Random selection
+    const choice = playable[Math.floor(Math.random() * playable.length)];
+    const side = choice.sides[Math.floor(Math.random() * choice.sides.length)];
+    return { domino: choice.domino, side };
+  }
+
+  if (difficulty === "medium") {
+    // Medium: Prefer doubles, then higher pip counts
+    playable.sort((a, b) => {
+      const aIsDouble = a.domino.left === a.domino.right;
+      const bIsDouble = b.domino.left === b.domino.right;
+      if (aIsDouble && !bIsDouble) return -1;
+      if (!aIsDouble && bIsDouble) return 1;
+      return b.domino.left + b.domino.right - (a.domino.left + a.domino.right);
+    });
+    const choice = playable[0];
+    const side = choice.sides[0];
+    return { domino: choice.domino, side };
+  }
+
+  // Hard: Strategic play
+  // 1. Play doubles first
+  // 2. Try to match numbers that appear frequently in hand (control the game)
+  // 3. Avoid leaving opponent with easy plays
+  // 4. Keep variety in hand
+
+  const numberCounts: number[] = [0, 0, 0, 0, 0, 0, 0];
+  for (const d of player.hand) {
+    numberCounts[d.left]++;
+    numberCounts[d.right]++;
+  }
+
+  let bestScore = -Infinity;
+  let bestChoice: { domino: Domino; side: "left" | "right" } | null = null;
+
+  for (const { domino, sides } of playable) {
+    for (const side of sides) {
+      let score = 0;
+
+      // Prefer doubles
+      if (domino.left === domino.right) {
+        score += 20;
+      }
+
+      // Prefer high pip count (get rid of heavy tiles)
+      score += (domino.left + domino.right) * 2;
+
+      // Calculate what end we'd leave
+      let newEnd: number;
+      if (boardEmpty) {
+        newEnd = side === "left" ? domino.left : domino.right;
+      } else if (side === "left") {
+        newEnd =
+          domino.right === game.boardLeftEnd ? domino.left : domino.right;
+      } else {
+        newEnd =
+          domino.left === game.boardRightEnd ? domino.right : domino.left;
+      }
+
+      // Prefer leaving numbers we have more of
+      score += numberCounts[newEnd] * 5;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestChoice = { domino, side };
+      }
+    }
+  }
+
+  return bestChoice;
+}
+
+// Process AI turn
+function processAITurn(
+  game: GameState,
+  io: Server<ClientToServerEvents, ServerToClientEvents>,
+): void {
+  const currentPlayer = game.players[game.currentPlayerIndex];
+
+  if (!currentPlayer.isAI || game.gamePhase !== "playing") return;
+
+  // Add delay to make it feel more natural
+  setTimeout(
+    () => {
+      const move = aiSelectMove(game, currentPlayer);
+
+      if (move) {
+        // Play the domino
+        const { domino, side } = move;
+        const dominoIndex = currentPlayer.hand.findIndex(
+          (d) => d.id === domino.id,
+        );
+        currentPlayer.hand.splice(dominoIndex, 1);
+
+        const boardEmpty = game.board.length === 0;
+
+        if (boardEmpty) {
+          game.board.push(domino);
+          game.boardLeftEnd = domino.left;
+          game.boardRightEnd = domino.right;
+        } else if (side === "left") {
+          if (domino.right === game.boardLeftEnd) {
+            game.board.unshift(domino);
+            game.boardLeftEnd = domino.left;
+          } else {
+            const flipped = {
+              ...domino,
+              left: domino.right,
+              right: domino.left,
+            };
+            game.board.unshift(flipped);
+            game.boardLeftEnd = flipped.left;
+          }
+        } else {
+          if (domino.left === game.boardRightEnd) {
+            game.board.push(domino);
+            game.boardRightEnd = domino.right;
+          } else {
+            const flipped = {
+              ...domino,
+              left: domino.right,
+              right: domino.left,
+            };
+            game.board.push(flipped);
+            game.boardRightEnd = flipped.right;
+          }
+        }
+
+        game.passCount = 0;
+        game.lastAction = `${currentPlayer.name} played [${domino.left}|${domino.right}]`;
+      } else {
+        // AI must pass
+        game.passCount++;
+        game.lastAction = `${currentPlayer.name} passed`;
+      }
+
+      if (!checkGameOver(game)) {
+        game.currentPlayerIndex = getNextPlayerIndex(game);
+        game.lastAction += ` - ${game.players[game.currentPlayerIndex].name}'s turn`;
+
+        io.to(game.id).emit("gameState", game);
+
+        // If next player is also AI, process their turn
+        if (game.players[game.currentPlayerIndex].isAI) {
+          processAITurn(game, io);
+        }
+      } else {
+        io.to(game.id).emit("gameState", game);
+        io.to(game.id).emit("gameOver", game.winner!, game.scores);
+      }
+    },
+    800 + Math.random() * 700,
+  ); // Random delay between 0.8-1.5 seconds
+}
+
 app.prepare().then(() => {
   const httpServer = createServer(handler);
 
@@ -137,6 +366,76 @@ app.prepare().then(() => {
 
   io.on("connection", (socket) => {
     console.log(`Client connected: ${socket.id}`);
+
+    // Create AI Game handler
+    socket.on(
+      "createAIGame",
+      ({ gameId, playerName, team, gameMode, aiDifficulty }) => {
+        let game = games.get(gameId);
+
+        if (game) {
+          socket.emit(
+            "error",
+            "Game room already exists! Try a different code.",
+          );
+          return;
+        }
+
+        game = createGame(gameId, gameMode, aiDifficulty);
+        games.set(gameId, game);
+
+        // Create the human player
+        const humanPlayer: Player = {
+          id: socket.id,
+          name: playerName,
+          team,
+          hand: [],
+          isReady: true,
+          isConnected: true,
+          isAI: false,
+        };
+
+        game.players.push(humanPlayer);
+        playerSockets.set(socket.id, humanPlayer.id);
+
+        // Add AI players based on game mode
+        if (gameMode === "vs-ai") {
+          // Human + AI partner vs 2 AI opponents
+          const partnerTeam = team;
+          const opponentTeam: Team = team === "team1" ? "team2" : "team1";
+
+          // Add AI partner
+          game.players.push(
+            createAIPlayer(AI_NAMES[0], partnerTeam, aiDifficulty),
+          );
+          // Add AI opponents
+          game.players.push(
+            createAIPlayer(AI_NAMES[1], opponentTeam, aiDifficulty),
+          );
+          game.players.push(
+            createAIPlayer(AI_NAMES[2], opponentTeam, aiDifficulty),
+          );
+        } else if (gameMode === "with-ai-partner") {
+          // Human + AI partner - waiting for 2 more human players
+          game.players.push(createAIPlayer(AI_NAMES[0], team, aiDifficulty));
+        }
+
+        // Reorder players: T1P1, T2P1, T1P2, T2P2
+        const team1Players = game.players.filter((p) => p.team === "team1");
+        const team2Players = game.players.filter((p) => p.team === "team2");
+        game.players = [];
+        for (let i = 0; i < 2; i++) {
+          if (team1Players[i]) game.players.push(team1Players[i]);
+          if (team2Players[i]) game.players.push(team2Players[i]);
+        }
+
+        socket.join(gameId);
+        game.lastAction = `${playerName} created ${gameMode === "vs-ai" ? "AI Game" : "game with AI partner"}`;
+
+        io.to(gameId).emit("gameState", game);
+        console.log(`${playerName} created AI game ${gameId} (${gameMode})`);
+      },
+    );
 
     socket.on("joinGame", ({ gameId, playerName, team }) => {
       let game = games.get(gameId);
@@ -170,6 +469,7 @@ app.prepare().then(() => {
         hand: [],
         isReady: true,
         isConnected: true,
+        isAI: false,
       };
 
       game.players.push(player);
@@ -231,6 +531,11 @@ app.prepare().then(() => {
 
       io.to(gameId).emit("gameStarted", game);
       io.to(gameId).emit("gameState", game);
+
+      // If starting player is AI, process their turn
+      if (game.players[game.currentPlayerIndex].isAI) {
+        processAITurn(game, io);
+      }
     });
 
     socket.on("playDomino", ({ gameId, dominoId, side }) => {
@@ -322,6 +627,9 @@ app.prepare().then(() => {
 
       if (game.gamePhase === "finished") {
         io.to(gameId).emit("gameOver", game.winner!, game.scores);
+      } else if (game.players[game.currentPlayerIndex].isAI) {
+        // Trigger AI turn
+        processAITurn(game, io);
       }
     });
 
@@ -365,6 +673,9 @@ app.prepare().then(() => {
 
       if (game.gamePhase === "finished") {
         io.to(gameId).emit("gameOver", game.winner!, game.scores);
+      } else if (game.players[game.currentPlayerIndex].isAI) {
+        // Trigger AI turn
+        processAITurn(game, io);
       }
     });
 

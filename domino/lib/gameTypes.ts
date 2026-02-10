@@ -7,6 +7,8 @@ export interface Domino {
 }
 
 export type Team = "team1" | "team2";
+export type GameMode = "multiplayer" | "vs-ai" | "with-ai-partner";
+export type AIDifficulty = "easy" | "medium" | "hard";
 
 export interface Player {
   id: string;
@@ -15,6 +17,8 @@ export interface Player {
   hand: Domino[];
   isReady: boolean;
   isConnected: boolean;
+  isAI: boolean;
+  aiDifficulty?: AIDifficulty;
 }
 
 export interface GameState {
@@ -32,6 +36,8 @@ export interface GameState {
     team1: number;
     team2: number;
   };
+  gameMode: GameMode;
+  aiDifficulty: AIDifficulty;
 }
 
 export interface ServerToClientEvents {
@@ -55,6 +61,13 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
   joinGame: (data: { gameId: string; playerName: string; team: Team }) => void;
+  createAIGame: (data: {
+    gameId: string;
+    playerName: string;
+    team: Team;
+    gameMode: GameMode;
+    aiDifficulty: AIDifficulty;
+  }) => void;
   startGame: (gameId: string) => void;
   playDomino: (data: {
     gameId: string;
