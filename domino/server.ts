@@ -582,13 +582,6 @@ function checkGameOver(game: GameState): boolean {
     const minTotal = Math.min(...playerTotals.map((p) => p.total));
     const minPlayers = playerTotals.filter((p) => p.total === minTotal);
 
-    const team1Total = playerTotals
-      .filter((p) => p.team === "team1")
-      .reduce((sum, p) => sum + p.total, 0);
-    const team2Total = playerTotals
-      .filter((p) => p.team === "team2")
-      .reduce((sum, p) => sum + p.total, 0);
-
     if (minPlayers.length > 1) {
       const teams = new Set(minPlayers.map((p) => p.team));
       game.winner = teams.size === 1 ? minPlayers[0].team : "draw";
@@ -596,7 +589,18 @@ function checkGameOver(game: GameState): boolean {
       game.winner = minPlayers[0].team;
     }
 
-    game.scores = { team1: team1Total, team2: team2Total };
+    if (game.winner === "draw") {
+      game.scores = { team1: 0, team2: 0 };
+    } else {
+      const winnerPlayerId = minPlayers[0]?.id;
+      const winningPoints = playerTotals
+        .filter((p) => p.id !== winnerPlayerId)
+        .reduce((sum, p) => sum + p.total, 0);
+      game.scores =
+        game.winner === "team1"
+          ? { team1: winningPoints, team2: 0 }
+          : { team1: 0, team2: winningPoints };
+    }
 
     game.lastAction = `Game blocked! ${game.winner === "draw" ? "It's a draw!" : `${game.winner === "team1" ? "Team 1" : "Team 2"} wins!`}`;
     updateLearningOnGameEnd(game);
