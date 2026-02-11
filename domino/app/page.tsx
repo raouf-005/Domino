@@ -73,7 +73,7 @@ function Particles() {
 function AnimatedBackground() {
   return (
     <div className="fixed inset-0 -z-10">
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-900 via-green-800 to-teal-900" />
+      <div className="absolute inset-0 bg-linear-to-br from-emerald-900 via-green-800 to-teal-900" />
       <div className="absolute inset-0 opacity-30">
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
           <defs>
@@ -92,6 +92,33 @@ function AnimatedBackground() {
         </svg>
       </div>
       <Particles />
+    </div>
+  );
+}
+
+function FaceDownTile({ size = "sm" }: { size?: "sm" | "md" }) {
+  const dims = size === "md" ? "w-5 h-8" : "w-4 h-7";
+  return (
+    <div
+      className={`${dims} rounded-md border border-white/30 bg-linear-to-br from-slate-900 to-slate-700 shadow-md`}
+      style={{ boxShadow: "inset 0 1px 2px rgba(255,255,255,.15)" }}
+    />
+  );
+}
+
+function HandPreview({ count, max = 7 }: { count: number; max?: number }) {
+  const shown = Math.min(count, max);
+  const extra = Math.max(0, count - max);
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: shown }).map((_, i) => (
+        <FaceDownTile key={i} />
+      ))}
+      {extra > 0 && (
+        <span className="text-xs text-white/80 bg-black/30 px-2 py-0.5 rounded-full">
+          +{extra}
+        </span>
+      )}
     </div>
   );
 }
@@ -125,10 +152,10 @@ function PlayerCard({
         ${
           player
             ? isCurrentTurn
-              ? "bg-gradient-to-br from-yellow-400/90 to-amber-500/90 shadow-2xl shadow-yellow-500/30 scale-105"
+              ? "bg-linear-to-br from-yellow-400/90 to-amber-500/90 shadow-2xl shadow-yellow-500/30 scale-105"
               : player.team === "team1"
-                ? "bg-gradient-to-br from-blue-500/80 to-blue-600/80"
-                : "bg-gradient-to-br from-red-500/80 to-red-600/80"
+                ? "bg-linear-to-br from-blue-500/80 to-blue-600/80"
+                : "bg-linear-to-br from-red-500/80 to-red-600/80"
             : "bg-white/10"
         }
         ${isMe ? "ring-4 ring-white/50" : ""}
@@ -146,6 +173,9 @@ function PlayerCard({
       {player ? (
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-2">
+            <div className="h-8 w-8 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white font-bold">
+              {player.name?.charAt(0)?.toUpperCase()}
+            </div>
             {isMe && <span className="text-lg">👤</span>}
             {player.isAI && <span className="text-lg">🤖</span>}
             <p className="font-bold text-white truncate text-lg drop-shadow-md">
@@ -168,6 +198,13 @@ function PlayerCard({
               <span className="text-white font-bold">{player.hand.length}</span>
             </div>
           </div>
+
+          {!isMe && (
+            <div className="mt-3 flex items-center justify-between">
+              <HandPreview count={player.hand.length} />
+              <span className="text-white/70 text-xs">tiles</span>
+            </div>
+          )}
 
           {!player.isConnected && !player.isAI && (
             <motion.div
@@ -216,7 +253,7 @@ function GameBoard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="relative bg-gradient-to-b from-green-700/50 to-green-800/50 backdrop-blur-md rounded-3xl p-6 shadow-2xl border border-white/10"
+      className="relative bg-linear-to-b from-green-700/50 to-green-800/50 backdrop-blur-md rounded-3xl p-6 shadow-2xl border border-white/10"
     >
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-4">
@@ -286,6 +323,7 @@ export default function GamePage() {
   const [selectedDomino, setSelectedDomino] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
   const [chatMessages, setChatMessages] = useState<
     { playerName: string; message: string }[]
   >([]);
@@ -398,6 +436,22 @@ export default function GamePage() {
   const currentPlayer = gameState?.players.find((p) => p.id === socket?.id);
   const isMyTurn =
     gameState?.players[gameState.currentPlayerIndex]?.id === socket?.id;
+  const currentTurn = gameState?.players[gameState.currentPlayerIndex];
+
+  const myIndex =
+    gameState?.players.findIndex((p) => p.id === socket?.id) ?? -1;
+  const leftPlayer =
+    myIndex >= 0 && gameState
+      ? gameState.players[(myIndex + 1) % gameState.players.length]
+      : undefined;
+  const topPlayer =
+    myIndex >= 0 && gameState
+      ? gameState.players[(myIndex + 2) % gameState.players.length]
+      : undefined;
+  const rightPlayer =
+    myIndex >= 0 && gameState
+      ? gameState.players[(myIndex + 3) % gameState.players.length]
+      : undefined;
 
   const getPlayableSides = (domino: Domino): ("left" | "right")[] => {
     if (!gameState) return [];
@@ -413,6 +467,28 @@ export default function GamePage() {
 
   const canPass =
     currentPlayer?.hand.every((d) => getPlayableSides(d).length === 0) ?? false;
+
+  const handSum = (hand: Domino[]) =>
+    hand.reduce((sum, d) => sum + d.left + d.right, 0);
+
+  const teamTotals = gameState
+    ? {
+        team1: gameState.players
+          .filter((p) => p.team === "team1")
+          .reduce((sum, p) => sum + handSum(p.hand), 0),
+        team2: gameState.players
+          .filter((p) => p.team === "team2")
+          .reduce((sum, p) => sum + handSum(p.hand), 0),
+      }
+    : { team1: 0, team2: 0 };
+
+  const loserTeam =
+    gameState?.winner === "team1"
+      ? "team2"
+      : gameState?.winner === "team2"
+        ? "team1"
+        : null;
+  const loserPoints = loserTeam ? teamTotals[loserTeam] : null;
 
   // Login/Join screen
   if (!joined) {
@@ -434,10 +510,10 @@ export default function GamePage() {
               transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
               className="text-center mb-6"
             >
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl shadow-lg mb-4">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-linear-to-br from-emerald-500 to-green-600 rounded-2xl shadow-lg mb-4">
                 <span className="text-4xl">🁣</span>
               </div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-green-700 bg-clip-text text-transparent">
+              <h1 className="text-4xl font-bold bg-linear-to-r from-emerald-600 to-green-700 bg-clip-text text-transparent">
                 Domino
               </h1>
               <p className="text-gray-500 mt-1">2 vs 2 Multiplayer</p>
@@ -642,7 +718,7 @@ export default function GamePage() {
                 transition={{ delay: 0.8 }}
                 onClick={joinGame}
                 disabled={!playerName.trim() || !gameId.trim()}
-                className="w-full py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-bold text-lg hover:from-emerald-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                className="w-full py-4 bg-linear-to-r from-emerald-500 to-green-600 text-white rounded-xl font-bold text-lg hover:from-emerald-600 hover:to-green-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
               >
                 {gameMode === "multiplayer"
                   ? "🎮 Join Game"
@@ -656,7 +732,7 @@ export default function GamePage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1 }}
-              className="mt-6 p-4 bg-gradient-to-r from-gray-100 to-gray-50 rounded-xl"
+              className="mt-6 p-4 bg-linear-to-r from-gray-100 to-gray-50 rounded-xl"
             >
               <p className="text-sm text-gray-600 text-center">
                 {gameMode === "multiplayer"
@@ -703,6 +779,48 @@ export default function GamePage() {
             </motion.div>
           )}
         </AnimatePresence>
+        <AnimatePresence>
+          {showRules && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ y: 20, scale: 0.98 }}
+                animate={{ y: 0, scale: 1 }}
+                exit={{ y: 20, scale: 0.98 }}
+                className="w-full max-w-lg bg-white/95 rounded-2xl p-6 shadow-2xl border border-white/20"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">
+                    How to play
+                  </h3>
+                  <button
+                    onClick={() => setShowRules(false)}
+                    className="px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200"
+                  >
+                    Close
+                  </button>
+                </div>
+                <ul className="space-y-2 text-gray-700 text-sm leading-relaxed">
+                  <li>• Match either end value on the board.</li>
+                  <li>• Doubles are placed vertically.</li>
+                  <li>• If you can’t play, pass your turn.</li>
+                  <li>
+                    • Round ends when a player empties their hand or all players
+                    pass.
+                  </li>
+                  <li>
+                    • Scores are based on remaining pips in the opponents’
+                    hands.
+                  </li>
+                </ul>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Header */}
         <motion.div
@@ -723,6 +841,17 @@ export default function GamePage() {
               )}
             </h1>
             <p className="text-white/70 mt-1">{gameState?.lastAction}</p>
+            {currentTurn && (
+              <p className="text-white/60 mt-1 text-sm">
+                Turn:{" "}
+                <span className="font-semibold text-white">
+                  {currentTurn.name}
+                </span>
+                {currentTurn.team
+                  ? ` • ${currentTurn.team === "team1" ? "Team 1" : "Team 2"}`
+                  : ""}
+              </p>
+            )}
           </div>
 
           <div className="flex gap-6">
@@ -751,6 +880,12 @@ export default function GamePage() {
               className="px-4 py-2 rounded-xl bg-white/10 text-white font-semibold border border-white/10 hover:bg-white/20 transition"
             >
               Copy Room
+            </button>
+            <button
+              onClick={() => setShowRules(true)}
+              className="px-4 py-2 rounded-xl bg-white/10 text-white font-semibold border border-white/10 hover:bg-white/20 transition"
+            >
+              Rules
             </button>
             <button
               onClick={leaveMatch}
@@ -815,11 +950,25 @@ export default function GamePage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={startGame}
-                className="px-12 py-5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-2xl font-bold text-2xl shadow-2xl"
+                className="px-12 py-5 bg-linear-to-r from-emerald-500 to-green-600 text-white rounded-2xl font-bold text-2xl shadow-2xl"
               >
                 🎮 Start Game!
               </motion.button>
             )}
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <button
+                onClick={copyRoomCode}
+                className="px-5 py-3 rounded-xl bg-white/10 text-white font-semibold border border-white/10 hover:bg-white/20 transition"
+              >
+                Copy Room
+              </button>
+              <button
+                onClick={leaveMatch}
+                className="px-5 py-3 rounded-xl bg-red-500/80 text-white font-semibold hover:bg-red-600 transition"
+              >
+                Leave Match
+              </button>
+            </div>
           </motion.div>
         ) : gameState?.gamePhase === "finished" ? (
           <motion.div
@@ -864,12 +1013,61 @@ export default function GamePage() {
                 </p>
               </motion.div>
             </div>
+
+            <div className="mt-6 text-white/80 text-lg">
+              {gameState.winner === "draw" ? (
+                <span>
+                  Draw — Team 1 tiles: {teamTotals.team1} pts • Team 2 tiles:{" "}
+                  {teamTotals.team2} pts
+                </span>
+              ) : (
+                <span>Losing team tiles total: {loserPoints ?? 0} pts</span>
+              )}
+            </div>
+
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+              {gameState.players.map((player, idx) => (
+                <div
+                  key={`${player.id}-${idx}`}
+                  className="bg-black/20 rounded-2xl p-4 border border-white/10"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-white font-bold text-lg">
+                      {player.name}
+                    </div>
+                    <div className="text-white/60 text-sm">
+                      {player.team === "team1" ? "Team 1" : "Team 2"}
+                    </div>
+                  </div>
+                  <div className="text-white/70 text-sm mt-1">
+                    Tiles: {player.hand.length} • Sum: {handSum(player.hand)}{" "}
+                    pts
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {player.hand.length === 0 ? (
+                      <span className="text-white/40 text-sm italic">
+                        No tiles
+                      </span>
+                    ) : (
+                      player.hand.map((d) => (
+                        <DominoTile2D
+                          key={`${player.id}-${d.id}`}
+                          domino={d}
+                          horizontal
+                          size="small"
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={startGame}
-                className="px-10 py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-2xl font-bold text-lg shadow-2xl"
+                className="px-10 py-4 bg-linear-to-r from-emerald-500 to-green-600 text-white rounded-2xl font-bold text-lg shadow-2xl"
               >
                 Play Another Round
               </motion.button>
@@ -877,7 +1075,7 @@ export default function GamePage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={leaveMatch}
-                className="px-10 py-4 bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-2xl font-bold text-lg shadow-2xl"
+                className="px-10 py-4 bg-linear-to-r from-gray-700 to-gray-800 text-white rounded-2xl font-bold text-lg shadow-2xl"
               >
                 Leave Match
               </motion.button>
@@ -896,6 +1094,9 @@ export default function GamePage() {
               onPlay={playDomino}
               onPass={pass}
               canPass={canPass}
+              topHandCount={topPlayer?.hand.length ?? 0}
+              leftHandCount={leftPlayer?.hand.length ?? 0}
+              rightHandCount={rightPlayer?.hand.length ?? 0}
             />
           </>
         )}

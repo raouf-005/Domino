@@ -16,6 +16,9 @@ export interface GameBoard3DProps {
   onPlay: (id: string, s: "left" | "right") => void;
   onPass: () => void;
   canPass: boolean;
+  topHandCount?: number;
+  leftHandCount?: number;
+  rightHandCount?: number;
 }
 
 export function GameBoard3D({
@@ -28,10 +31,13 @@ export function GameBoard3D({
   onPlay,
   onPass,
   canPass,
+  topHandCount = 0,
+  leftHandCount = 0,
+  rightHandCount = 0,
 }: GameBoard3DProps) {
   return (
     <div
-      className="relative w-full rounded-3xl border border-white/10 shadow-2xl bg-gradient-to-b from-emerald-900/60 to-emerald-950/80 p-2"
+      className="relative w-full rounded-3xl border border-white/10 shadow-2xl bg-linear-to-b from-emerald-900/60 to-emerald-950/80 p-2"
       style={{ height: "65vh", minHeight: 520 }}
     >
       <div
@@ -58,6 +64,9 @@ export function GameBoard3D({
           isMyTurn={isMyTurn}
           getPlayableSidesAction={getPlayableSides}
           onPlayAction={onPlay}
+          topHandCount={topHandCount}
+          leftHandCount={leftHandCount}
+          rightHandCount={rightHandCount}
         />
       </Canvas>
 
