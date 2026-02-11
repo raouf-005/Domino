@@ -11,13 +11,13 @@ export function TurnOverlay({
   return (
     <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 pointer-events-none">
       <div className="pointer-events-auto flex items-center gap-4">
-        <span className="bg-gradient-to-r from-yellow-400 to-amber-500 text-yellow-900 px-5 py-2 rounded-full font-bold shadow-lg text-lg">
+        <span className="bg-linear-to-r from-yellow-400 to-amber-500 text-yellow-900 px-5 py-2 rounded-full font-bold shadow-lg text-lg">
           Your Turn — Drag a tile!
         </span>
         {canPass && (
           <button
             onClick={onPass}
-            className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-bold hover:from-orange-600 hover:to-red-600 transition-all shadow-lg"
+            className="px-6 py-3 bg-linear-to-r from-orange-500 to-red-500 text-white rounded-xl font-bold hover:from-orange-600 hover:to-red-600 transition-all shadow-lg"
           >
             Pass
           </button>

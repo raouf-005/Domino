@@ -468,6 +468,23 @@ export default function GamePage() {
   const canPass =
     currentPlayer?.hand.every((d) => getPlayableSides(d).length === 0) ?? false;
 
+  const isBlockedEnd =
+    gameState?.gamePhase === "finished" && gameState.passCount >= 4;
+
+  const activeSeat = (() => {
+    if (!gameState || myIndex < 0) return null;
+    const rel =
+      (gameState.currentPlayerIndex - myIndex + gameState.players.length) %
+      gameState.players.length;
+    const seats: Array<"bottom" | "left" | "top" | "right"> = [
+      "bottom",
+      "left",
+      "top",
+      "right",
+    ];
+    return seats[rel] ?? null;
+  })();
+
   const handSum = (hand: Domino[]) =>
     hand.reduce((sum, d) => sum + d.left + d.right, 0);
 
@@ -970,6 +987,53 @@ export default function GamePage() {
               </button>
             </div>
           </motion.div>
+        ) : isBlockedEnd ? (
+          <>
+            <GameBoard3DNoSSR
+              board={gameState?.board || []}
+              boardLeftEnd={gameState?.boardLeftEnd ?? -1}
+              boardRightEnd={gameState?.boardRightEnd ?? -1}
+              hand={currentPlayer?.hand || []}
+              isMyTurn={false}
+              getPlayableSides={() => []}
+              onPlay={playDomino}
+              onPass={pass}
+              canPass={false}
+              topHandCount={topPlayer?.hand.length ?? 0}
+              leftHandCount={leftPlayer?.hand.length ?? 0}
+              rightHandCount={rightPlayer?.hand.length ?? 0}
+              revealAllHands
+              revealTopHand={topPlayer?.hand ?? []}
+              revealLeftHand={leftPlayer?.hand ?? []}
+              revealRightHand={rightPlayer?.hand ?? []}
+              showTurnOverlay={false}
+              activeSeat={null}
+              bottomTeam={currentPlayer?.team ?? null}
+              leftTeam={leftPlayer?.team ?? null}
+              topTeam={topPlayer?.team ?? null}
+              rightTeam={rightPlayer?.team ?? null}
+            />
+            <div className="mt-6 bg-white/10 backdrop-blur-md rounded-2xl p-4 text-center border border-white/10">
+              <h3 className="text-2xl font-bold text-white mb-2">
+                Game Blocked
+              </h3>
+              <p className="text-white/70 mb-4">{gameState.lastAction}</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button
+                  onClick={startGame}
+                  className="px-6 py-3 bg-linear-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold"
+                >
+                  Play Another Round
+                </button>
+                <button
+                  onClick={leaveMatch}
+                  className="px-6 py-3 bg-linear-to-r from-gray-700 to-gray-800 text-white rounded-xl font-semibold"
+                >
+                  Leave Match
+                </button>
+              </div>
+            </div>
+          </>
         ) : gameState?.gamePhase === "finished" ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -1097,6 +1161,11 @@ export default function GamePage() {
               topHandCount={topPlayer?.hand.length ?? 0}
               leftHandCount={leftPlayer?.hand.length ?? 0}
               rightHandCount={rightPlayer?.hand.length ?? 0}
+              activeSeat={activeSeat}
+              bottomTeam={currentPlayer?.team ?? null}
+              leftTeam={leftPlayer?.team ?? null}
+              topTeam={topPlayer?.team ?? null}
+              rightTeam={rightPlayer?.team ?? null}
             />
           </>
         )}

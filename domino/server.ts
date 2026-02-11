@@ -36,6 +36,397 @@ const AI_NAMES = [
   "🤖 Bot Delta",
 ];
 
+class LearningAI {
+  playerId: string;
+  style: "learning";
+  learningRate: number;
+  qTable: Map<string, Map<string, number>>;
+  strategyWeights: Record<
+    | "board_control"
+    | "blocking"
+    | "hand_safety"
+    | "tempo"
+    | "partnership"
+    | "prediction",
+    number
+  >;
+  experienceBuffer: Array<{ state: string; action: string }>;
+  wins: number;
+  losses: number;
+  gamesPlayed: number;
+  winRateHistory: number[];
+  epsilon: number;
+  epsilonDecay: number;
+  minEpsilon: number;
+  numberCounts: number[];
+  estimatedOpponentHands: Map<string, Domino[]>;
+
+  constructor(
+    playerId: string,
+    style: "learning" = "learning",
+    learningRate = 0.1,
+  ) {
+    this.playerId = playerId;
+    this.style = style;
+    this.learningRate = learningRate;
+    this.qTable = new Map();
+    this.strategyWeights = this.initializeWeights();
+    this.experienceBuffer = [];
+    this.wins = 0;
+    this.losses = 0;
+    this.gamesPlayed = 0;
+    this.winRateHistory = [];
+    this.epsilon = 0.3;
+    this.epsilonDecay = 0.995;
+    this.minEpsilon = 0.05;
+    this.numberCounts = [0, 0, 0, 0, 0, 0, 0];
+    this.estimatedOpponentHands = new Map();
+  }
+
+  initializeWeights() {
+    const baseWeights = {
+      board_control: 0.25 + (Math.random() - 0.5) * 0.2,
+      blocking: 0.25 + (Math.random() - 0.5) * 0.2,
+      hand_safety: 0.25 + (Math.random() - 0.5) * 0.2,
+      tempo: 0.25 + (Math.random() - 0.5) * 0.2,
+      partnership: 0.0 + (Math.random() - 0.5) * 0.1,
+      prediction: 0.0,
+    };
+    const total = Object.values(baseWeights).reduce((a, b) => a + b, 0);
+    (Object.keys(baseWeights) as Array<keyof typeof baseWeights>).forEach(
+      (k) => (baseWeights[k] /= total),
+    );
+    return baseWeights;
+  }
+
+  getStateKey(game: GameState, player: Player): string {
+    const boardEmpty = game.board.length === 0;
+    const handPoints = player.hand.reduce((s, d) => s + d.left + d.right, 0);
+    const doublesInHand = player.hand.filter((d) => d.left === d.right).length;
+    const validMoves = getPlayableDominoes(
+      player.hand,
+      game.boardLeftEnd,
+      game.boardRightEnd,
+      boardEmpty,
+    ).length;
+    const leftEnd = boardEmpty ? -1 : game.boardLeftEnd;
+    const rightEnd = boardEmpty ? -1 : game.boardRightEnd;
+    const stateKey = [
+      Math.min(player.hand.length, 7),
+      Math.min(Math.floor(handPoints / 7), 10),
+      Math.min(doublesInHand, 7),
+      leftEnd,
+      rightEnd,
+      Math.min(Math.floor(game.board.length / 3), 10),
+      Math.min(validMoves, 10),
+    ].join("|");
+    return stateKey;
+  }
+
+  analyzeHand(player: Player) {
+    this.numberCounts = [0, 0, 0, 0, 0, 0, 0];
+    for (const d of player.hand) {
+      this.numberCounts[d.left] += 1;
+      this.numberCounts[d.right] += 1;
+    }
+  }
+
+  estimateOpponentHands(game: GameState, player: Player) {
+    const allTiles = generateDominoes();
+    const knownIds = new Set<string>();
+
+    for (const d of game.board) knownIds.add(d.id);
+    for (const d of player.hand) knownIds.add(d.id);
+
+    const partner = game.players.find(
+      (p) => p.team === player.team && p.id !== player.id,
+    );
+    if (partner) {
+      for (const d of partner.hand) knownIds.add(d.id);
+    }
+
+    const unknown = allTiles.filter((t) => !knownIds.has(t.id));
+    const shuffled = shuffle(unknown);
+
+    const opponents = game.players.filter((p) => p.team !== player.team);
+    const sizes = new Map(opponents.map((p) => [p.id, p.hand.length]));
+
+    const estimated = new Map<string, Domino[]>();
+    opponents.forEach((p) => estimated.set(p.id, []));
+
+    let idx = 0;
+    while (idx < shuffled.length) {
+      for (const opp of opponents) {
+        const left = sizes.get(opp.id) ?? 0;
+        if (left > 0 && idx < shuffled.length) {
+          estimated.get(opp.id)!.push(shuffled[idx]);
+          sizes.set(opp.id, left - 1);
+          idx += 1;
+        }
+        if (idx >= shuffled.length) break;
+      }
+      if (opponents.length === 0) break;
+    }
+
+    this.estimatedOpponentHands = estimated;
+  }
+
+  getMoveKey(domino: Domino, side: "left" | "right"): string {
+    const a = Math.min(domino.left, domino.right);
+    const b = Math.max(domino.left, domino.right);
+    return `${a}-${b}-${side}`;
+  }
+
+  getOrCreateState(stateKey: string): Map<string, number> {
+    const existing = this.qTable.get(stateKey);
+    if (existing) return existing;
+    const map = new Map<string, number>();
+    this.qTable.set(stateKey, map);
+    return map;
+  }
+
+  evaluateMove(
+    game: GameState,
+    player: Player,
+    domino: Domino,
+    side: "left" | "right",
+  ): number {
+    const boardEmpty = game.board.length === 0;
+    const newEnds = getNewEnds(
+      boardEmpty,
+      game.boardLeftEnd,
+      game.boardRightEnd,
+      domino,
+      side,
+    );
+    const newHand = player.hand.filter((d) => d.id !== domino.id);
+
+    let score = 0;
+    const weights = this.strategyWeights;
+
+    // Board control
+    const leftPlayable = newHand.filter(
+      (d) => d.left === newEnds.left || d.right === newEnds.left,
+    ).length;
+    const rightPlayable = newHand.filter(
+      (d) => d.left === newEnds.right || d.right === newEnds.right,
+    ).length;
+    let boardControl = (leftPlayable + rightPlayable) * 10;
+    if (leftPlayable > 0 && rightPlayable > 0) boardControl += 20;
+    score += boardControl * weights.board_control;
+
+    // Blocking (penalize leaving ends opponents likely have)
+    let blocking = 0;
+    for (const oppHand of this.estimatedOpponentHands.values()) {
+      const oppCount = oppHand.filter(
+        (d) =>
+          d.left === newEnds.left ||
+          d.right === newEnds.left ||
+          d.left === newEnds.right ||
+          d.right === newEnds.right,
+      ).length;
+      blocking -= oppCount * 7;
+    }
+    score += blocking * weights.blocking;
+
+    // Hand safety
+    const numbersInHand = new Set<number>();
+    newHand.forEach((d) => {
+      numbersInHand.add(d.left);
+      numbersInHand.add(d.right);
+    });
+    const handPoints = newHand.reduce((s, d) => s + d.left + d.right, 0);
+    let handSafety = numbersInHand.size * 5 - handPoints * 2;
+    score += handSafety * weights.hand_safety;
+
+    // Tempo
+    let tempo = 0;
+    if (domino.left === domino.right) tempo += 15;
+    tempo += (domino.left + domino.right) * 2;
+    score += tempo * weights.tempo;
+
+    // Partnership
+    const partner = game.players.find(
+      (p) => p.team === player.team && p.id !== player.id,
+    );
+    let partnership = 0;
+    if (partner) {
+      const partnerHand = partner.hand;
+      const partnerPlayable = partnerHand.filter(
+        (d) =>
+          d.left === newEnds.left ||
+          d.right === newEnds.left ||
+          d.left === newEnds.right ||
+          d.right === newEnds.right,
+      ).length;
+      partnership += partnerPlayable * 6;
+    }
+    score += partnership * weights.partnership;
+
+    return score;
+  }
+
+  evaluatePrediction(
+    game: GameState,
+    player: Player,
+    domino: Domino,
+    side: "left" | "right",
+  ): number {
+    const boardEmpty = game.board.length === 0;
+    const newEnds = getNewEnds(
+      boardEmpty,
+      game.boardLeftEnd,
+      game.boardRightEnd,
+      domino,
+      side,
+    );
+
+    const nextIndex = getNextPlayerIndex(game);
+    const nextPlayer = game.players[nextIndex];
+    if (nextPlayer.team === player.team) return 0;
+
+    const estimated = this.estimatedOpponentHands.get(nextPlayer.id) || [];
+    const playable = getPlayableDominoes(
+      estimated,
+      newEnds.left,
+      newEnds.right,
+      false,
+    );
+
+    if (playable.length === 0) return 25;
+
+    let bestScore = -Infinity;
+    for (const move of playable) {
+      for (const moveSide of move.sides) {
+        let score = 0;
+        if (move.domino.left === move.domino.right) score += 10;
+        score += move.domino.left + move.domino.right;
+        const ends = getNewEnds(
+          false,
+          newEnds.left,
+          newEnds.right,
+          move.domino,
+          moveSide,
+        );
+        const countInHand = estimated.filter(
+          (d) => d.left === ends.left || d.right === ends.left,
+        ).length;
+        score += countInHand * 4;
+        if (score > bestScore) bestScore = score;
+      }
+    }
+
+    return -bestScore * 0.5;
+  }
+
+  chooseMove(game: GameState, player: Player) {
+    this.analyzeHand(player);
+    this.estimateOpponentHands(game, player);
+
+    const boardEmpty = game.board.length === 0;
+    const playable = getPlayableDominoes(
+      player.hand,
+      game.boardLeftEnd,
+      game.boardRightEnd,
+      boardEmpty,
+    );
+    if (playable.length === 0) return null;
+
+    if (playable.length === 1) {
+      const side = playable[0].sides[0];
+      return { domino: playable[0].domino, side };
+    }
+
+    const stateKey = this.getStateKey(game, player);
+    const stateMap = this.getOrCreateState(stateKey);
+
+    if (Math.random() < this.epsilon) {
+      const choice = playable[Math.floor(Math.random() * playable.length)];
+      const side =
+        choice.sides[Math.floor(Math.random() * choice.sides.length)];
+      this.experienceBuffer.push({
+        state: stateKey,
+        action: this.getMoveKey(choice.domino, side),
+      });
+      return { domino: choice.domino, side };
+    }
+
+    let bestScore = -Infinity;
+    let bestMove: { domino: Domino; side: "left" | "right" } | null = null;
+
+    for (const option of playable) {
+      for (const side of option.sides) {
+        const moveKey = this.getMoveKey(option.domino, side);
+        const qValue = stateMap.get(moveKey) ?? 0;
+        const heuristic = this.evaluateMove(game, player, option.domino, side);
+        const prediction = this.evaluatePrediction(
+          game,
+          player,
+          option.domino,
+          side,
+        );
+        const combined = 0.6 * qValue + 0.2 * heuristic + 0.2 * prediction;
+        if (combined > bestScore) {
+          bestScore = combined;
+          bestMove = { domino: option.domino, side };
+        }
+      }
+    }
+
+    const finalMove = bestMove ?? {
+      domino: playable[0].domino,
+      side: playable[0].sides[0],
+    };
+
+    this.experienceBuffer.push({
+      state: stateKey,
+      action: this.getMoveKey(finalMove.domino, finalMove.side),
+    });
+
+    return finalMove;
+  }
+
+  learnFromGame(game: GameState, result: "win" | "loss" | "draw") {
+    this.gamesPlayed += 1;
+
+    const winningPoints =
+      game.winner === "team1"
+        ? game.scores.team1
+        : game.winner === "team2"
+          ? game.scores.team2
+          : 0;
+
+    let finalReward = 0;
+    if (result === "win") {
+      this.wins += 1;
+      finalReward = winningPoints;
+    } else if (result === "loss") {
+      this.losses += 1;
+      finalReward = -winningPoints;
+    }
+
+    const winRate = this.gamesPlayed > 0 ? this.wins / this.gamesPlayed : 0;
+    this.winRateHistory.push(winRate);
+
+    let discounted = finalReward;
+    const discountFactor = 0.95;
+
+    for (let i = this.experienceBuffer.length - 1; i >= 0; i -= 1) {
+      const exp = this.experienceBuffer[i];
+      const stateMap = this.getOrCreateState(exp.state);
+      const oldQ = stateMap.get(exp.action) ?? 0;
+      const updated = oldQ + this.learningRate * (discounted - oldQ);
+      stateMap.set(exp.action, updated);
+      discounted *= discountFactor;
+    }
+
+    this.experienceBuffer = [];
+    this.epsilon = Math.max(this.minEpsilon, this.epsilon * this.epsilonDecay);
+  }
+}
+
+const learningAIs: Map<string, LearningAI> = new Map();
+
 function createGame(
   gameId: string,
   gameMode: GameMode = "multiplayer",
@@ -63,7 +454,7 @@ function createAIPlayer(
   team: Team,
   difficulty: AIDifficulty,
 ): Player {
-  return {
+  const player: Player = {
     id: `ai-${uuidv4()}`,
     name,
     team,
@@ -73,6 +464,8 @@ function createAIPlayer(
     isAI: true,
     aiDifficulty: difficulty,
   };
+  learningAIs.set(player.id, new LearningAI(player.id));
+  return player;
 }
 
 function dealDominoes(game: GameState): void {
@@ -117,6 +510,44 @@ function getNextPlayerIndex(game: GameState): number {
   return (game.currentPlayerIndex + 1) % 4;
 }
 
+function getNewEnds(
+  boardEmpty: boolean,
+  leftEnd: number,
+  rightEnd: number,
+  domino: Domino,
+  side: "left" | "right",
+): { left: number; right: number } {
+  if (boardEmpty) {
+    return { left: domino.left, right: domino.right };
+  }
+  if (side === "left") {
+    const newLeft = domino.right === leftEnd ? domino.left : domino.right;
+    return { left: newLeft, right: rightEnd };
+  }
+  const newRight = domino.left === rightEnd ? domino.right : domino.left;
+  return { left: leftEnd, right: newRight };
+}
+
+function updateLearningOnGameEnd(game: GameState) {
+  if (!game.winner) return;
+
+  for (const player of game.players) {
+    if (!player.isAI) continue;
+    const ai = learningAIs.get(player.id);
+    if (!ai) continue;
+
+    let result: "win" | "loss" | "draw" = "draw";
+    if (game.winner === "draw") {
+      result = "draw";
+    } else if (player.team === game.winner) {
+      result = "win";
+    } else {
+      result = "loss";
+    }
+    ai.learnFromGame(game, result);
+  }
+}
+
 function checkGameOver(game: GameState): boolean {
   // Check if current player has no dominoes
   const currentPlayer = game.players[game.currentPlayerIndex];
@@ -134,6 +565,7 @@ function checkGameOver(game: GameState): boolean {
 
     game.scores = { team1: team1Score, team2: team2Score };
     game.lastAction = `${currentPlayer.name} wins! ${currentPlayer.team === "team1" ? "Team 1" : "Team 2"} wins the round!`;
+    updateLearningOnGameEnd(game);
     return true;
   }
 
@@ -141,26 +573,33 @@ function checkGameOver(game: GameState): boolean {
   if (game.passCount >= 4) {
     game.gamePhase = "finished";
 
-    // Calculate scores for each team
-    const team1Total = game.players
-      .filter((p) => p.team === "team1")
-      .reduce((sum, p) => sum + calculateHandScore(p.hand), 0);
-    const team2Total = game.players
-      .filter((p) => p.team === "team2")
-      .reduce((sum, p) => sum + calculateHandScore(p.hand), 0);
+    const playerTotals = game.players.map((p) => ({
+      id: p.id,
+      team: p.team,
+      total: calculateHandScore(p.hand),
+    }));
 
-    if (team1Total < team2Total) {
-      game.winner = "team1";
-      game.scores = { team1: team2Total, team2: 0 };
-    } else if (team2Total < team1Total) {
-      game.winner = "team2";
-      game.scores = { team1: 0, team2: team1Total };
+    const minTotal = Math.min(...playerTotals.map((p) => p.total));
+    const minPlayers = playerTotals.filter((p) => p.total === minTotal);
+
+    const team1Total = playerTotals
+      .filter((p) => p.team === "team1")
+      .reduce((sum, p) => sum + p.total, 0);
+    const team2Total = playerTotals
+      .filter((p) => p.team === "team2")
+      .reduce((sum, p) => sum + p.total, 0);
+
+    if (minPlayers.length > 1) {
+      const teams = new Set(minPlayers.map((p) => p.team));
+      game.winner = teams.size === 1 ? minPlayers[0].team : "draw";
     } else {
-      game.winner = "draw";
-      game.scores = { team1: 0, team2: 0 };
+      game.winner = minPlayers[0].team;
     }
 
+    game.scores = { team1: team1Total, team2: team2Total };
+
     game.lastAction = `Game blocked! ${game.winner === "draw" ? "It's a draw!" : `${game.winner === "team1" ? "Team 1" : "Team 2"} wins!`}`;
+    updateLearningOnGameEnd(game);
     return true;
   }
 
@@ -226,6 +665,11 @@ function aiSelectMove(
     const choice = playable[0];
     const side = choice.sides[0];
     return { domino: choice.domino, side };
+  }
+
+  const learningAI = learningAIs.get(player.id);
+  if (difficulty === "hard" && learningAI) {
+    return learningAI.chooseMove(game, player);
   }
 
   // Hard: Strategic play
