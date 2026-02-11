@@ -39,6 +39,7 @@ const AI_NAMES = [
 class LearningAI {
   playerId: string;
   style: "learning";
+  difficulty: AIDifficulty;
   learningRate: number;
   qTable: Map<string, Map<string, number>>;
   strategyWeights: Record<
@@ -58,6 +59,9 @@ class LearningAI {
   epsilon: number;
   epsilonDecay: number;
   minEpsilon: number;
+  qWeight: number;
+  heuristicWeight: number;
+  predictionWeight: number;
   numberCounts: number[];
   estimatedOpponentHands: Map<string, Domino[]>;
 
@@ -65,9 +69,11 @@ class LearningAI {
     playerId: string,
     style: "learning" = "learning",
     learningRate = 0.1,
+    difficulty: AIDifficulty = "medium",
   ) {
     this.playerId = playerId;
     this.style = style;
+    this.difficulty = difficulty;
     this.learningRate = learningRate;
     this.qTable = new Map();
     this.strategyWeights = this.initializeWeights();
@@ -79,8 +85,13 @@ class LearningAI {
     this.epsilon = 0.3;
     this.epsilonDecay = 0.995;
     this.minEpsilon = 0.05;
+    this.qWeight = 0.6;
+    this.heuristicWeight = 0.2;
+    this.predictionWeight = 0.2;
     this.numberCounts = [0, 0, 0, 0, 0, 0, 0];
     this.estimatedOpponentHands = new Map();
+
+    this.applyDifficultyProfile();
   }
 
   initializeWeights() {
@@ -97,6 +108,78 @@ class LearningAI {
       (k) => (baseWeights[k] /= total),
     );
     return baseWeights;
+  }
+
+  applyDifficultyProfile() {
+    const profiles: Record<
+      AIDifficulty,
+      {
+        weights: Record<
+          | "board_control"
+          | "blocking"
+          | "hand_safety"
+          | "tempo"
+          | "partnership"
+          | "prediction",
+          number
+        >;
+        epsilon: number;
+        qWeight: number;
+        heuristicWeight: number;
+        predictionWeight: number;
+      }
+    > = {
+      easy: {
+        weights: {
+          board_control: 0.3268,
+          blocking: 0.1971,
+          hand_safety: 0.1738,
+          tempo: 0.3219,
+          partnership: -0.0196,
+          prediction: 0,
+        },
+        epsilon: 0.35,
+        qWeight: 0.0,
+        heuristicWeight: 0.7,
+        predictionWeight: 0.3,
+      },
+      medium: {
+        weights: {
+          board_control: 0.3212,
+          blocking: 0.1673,
+          hand_safety: 0.227,
+          tempo: 0.2641,
+          partnership: 0.0204,
+          prediction: 0,
+        },
+        epsilon: 0.2,
+        qWeight: 0.3,
+        heuristicWeight: 0.4,
+        predictionWeight: 0.3,
+      },
+      hard: {
+        weights: {
+          board_control: 0.1999,
+          blocking: 0.2775,
+          hand_safety: 0.2974,
+          tempo: 0.2118,
+          partnership: 0.0134,
+          prediction: 0,
+        },
+        epsilon: 0.1,
+        qWeight: 0.6,
+        heuristicWeight: 0.2,
+        predictionWeight: 0.2,
+      },
+    };
+
+    const profile = profiles[this.difficulty];
+    if (!profile) return;
+    this.strategyWeights = profile.weights;
+    this.epsilon = profile.epsilon;
+    this.qWeight = profile.qWeight;
+    this.heuristicWeight = profile.heuristicWeight;
+    this.predictionWeight = profile.predictionWeight;
   }
 
   getStateKey(game: GameState, player: Player): string {
@@ -365,7 +448,10 @@ class LearningAI {
           option.domino,
           side,
         );
-        const combined = 0.6 * qValue + 0.2 * heuristic + 0.2 * prediction;
+        const combined =
+          this.qWeight * qValue +
+          this.heuristicWeight * heuristic +
+          this.predictionWeight * prediction;
         if (combined > bestScore) {
           bestScore = combined;
           bestMove = { domino: option.domino, side };
@@ -464,7 +550,10 @@ function createAIPlayer(
     isAI: true,
     aiDifficulty: difficulty,
   };
-  learningAIs.set(player.id, new LearningAI(player.id));
+  learningAIs.set(
+    player.id,
+    new LearningAI(player.id, "learning", 0.1, difficulty),
+  );
   return player;
 }
 
@@ -483,7 +572,6 @@ function resetRound(game: GameState): void {
   game.boardRightEnd = -1;
   game.passCount = 0;
   game.winner = null;
-  game.scores = { team1: 0, team2: 0 };
   game.players.forEach((player) => {
     player.hand = [];
   });
@@ -555,15 +643,21 @@ function checkGameOver(game: GameState): boolean {
     game.gamePhase = "finished";
     game.winner = currentPlayer.team;
 
-    // Calculate scores
-    const team1Score = game.players
-      .filter((p) => p.team === "team2")
-      .reduce((sum, p) => sum + calculateHandScore(p.hand), 0);
-    const team2Score = game.players
-      .filter((p) => p.team === "team1")
+    const winningPoints = game.players
+      .filter((p) => p.team !== currentPlayer.team)
       .reduce((sum, p) => sum + calculateHandScore(p.hand), 0);
 
-    game.scores = { team1: team1Score, team2: team2Score };
+    const currentScores = game.scores ?? { team1: 0, team2: 0 };
+    game.scores =
+      currentPlayer.team === "team1"
+        ? {
+            team1: currentScores.team1 + winningPoints,
+            team2: currentScores.team2,
+          }
+        : {
+            team1: currentScores.team1,
+            team2: currentScores.team2 + winningPoints,
+          };
     game.lastAction = `${currentPlayer.name} wins! ${currentPlayer.team === "team1" ? "Team 1" : "Team 2"} wins the round!`;
     updateLearningOnGameEnd(game);
     return true;
@@ -590,16 +684,23 @@ function checkGameOver(game: GameState): boolean {
     }
 
     if (game.winner === "draw") {
-      game.scores = { team1: 0, team2: 0 };
+      game.scores = game.scores ?? { team1: 0, team2: 0 };
     } else {
       const winnerPlayerId = minPlayers[0]?.id;
       const winningPoints = playerTotals
         .filter((p) => p.id !== winnerPlayerId)
         .reduce((sum, p) => sum + p.total, 0);
+      const currentScores = game.scores ?? { team1: 0, team2: 0 };
       game.scores =
         game.winner === "team1"
-          ? { team1: winningPoints, team2: 0 }
-          : { team1: 0, team2: winningPoints };
+          ? {
+              team1: currentScores.team1 + winningPoints,
+              team2: currentScores.team2,
+            }
+          : {
+              team1: currentScores.team1,
+              team2: currentScores.team2 + winningPoints,
+            };
     }
 
     game.lastAction = `Game blocked! ${game.winner === "draw" ? "It's a draw!" : `${game.winner === "team1" ? "Team 1" : "Team 2"} wins!`}`;
@@ -650,29 +751,8 @@ function aiSelectMove(
 
   const difficulty = player.aiDifficulty || "medium";
 
-  if (difficulty === "easy") {
-    // Easy: Random selection
-    const choice = playable[Math.floor(Math.random() * playable.length)];
-    const side = choice.sides[Math.floor(Math.random() * choice.sides.length)];
-    return { domino: choice.domino, side };
-  }
-
-  if (difficulty === "medium") {
-    // Medium: Prefer doubles, then higher pip counts
-    playable.sort((a, b) => {
-      const aIsDouble = a.domino.left === a.domino.right;
-      const bIsDouble = b.domino.left === b.domino.right;
-      if (aIsDouble && !bIsDouble) return -1;
-      if (!aIsDouble && bIsDouble) return 1;
-      return b.domino.left + b.domino.right - (a.domino.left + a.domino.right);
-    });
-    const choice = playable[0];
-    const side = choice.sides[0];
-    return { domino: choice.domino, side };
-  }
-
   const learningAI = learningAIs.get(player.id);
-  if (difficulty === "hard" && learningAI) {
+  if (learningAI) {
     return learningAI.chooseMove(game, player);
   }
 
