@@ -24,6 +24,8 @@ interface DragTileProps {
   onDrag: (active: boolean, sides: Side[]) => void;
   leftDrop: Vec3;
   rightDrop: Vec3;
+  boardLeftEnd: number;
+  boardRightEnd: number;
 }
 
 export function DragTile({
@@ -37,6 +39,8 @@ export function DragTile({
   onDrag,
   leftDrop,
   rightDrop,
+  boardLeftEnd,
+  boardRightEnd,
 }: DragTileProps) {
   const group = useRef<THREE.Group>(null);
   const dragging = useRef(false);
@@ -278,19 +282,25 @@ export function DragTile({
             style={{ pointerEvents: "auto" }}
           >
             <div className="bg-black/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap mb-1 shadow-xl border border-white/20">
-              Which end?
+              Play on which end?
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => pickSide("left")}
-                className="px-5 py-2.5 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-blue-300/50"
+                className="flex flex-col items-center px-5 py-2.5 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-blue-300/50 min-w-[72px]"
               >
+                <span className="text-[10px] opacity-70 mb-0.5">
+                  end = {boardLeftEnd}
+                </span>
                 ← Left
               </button>
               <button
                 onClick={() => pickSide("right")}
-                className="px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-orange-300/50"
+                className="flex flex-col items-center px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-orange-300/50 min-w-[72px]"
               >
+                <span className="text-[10px] opacity-70 mb-0.5">
+                  end = {boardRightEnd}
+                </span>
                 Right →
               </button>
             </div>

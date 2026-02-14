@@ -83,6 +83,8 @@ export function GameBoard3D({
             isMyTurn={isMyTurn}
             getPlayableSidesAction={getPlayableSides}
             onPlayAction={onPlay}
+            boardLeftEnd={boardLeftEnd}
+            boardRightEnd={boardRightEnd}
             topHandCount={topHandCount}
             leftHandCount={leftHandCount}
             rightHandCount={rightHandCount}

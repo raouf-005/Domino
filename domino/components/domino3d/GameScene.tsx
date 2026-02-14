@@ -23,6 +23,8 @@ export function GameScene({
   isMyTurn,
   getPlayableSidesAction,
   onPlayAction,
+  boardLeftEnd = -1,
+  boardRightEnd = -1,
   topHandCount = 0,
   leftHandCount = 0,
   rightHandCount = 0,
@@ -41,6 +43,8 @@ export function GameScene({
   isMyTurn: boolean;
   getPlayableSidesAction: (d: Domino) => Side[];
   onPlayAction: (id: string, s: Side) => void;
+  boardLeftEnd?: number;
+  boardRightEnd?: number;
   topHandCount?: number;
   leftHandCount?: number;
   rightHandCount?: number;
@@ -106,6 +110,8 @@ export function GameScene({
           onDrag={onDrag}
           leftDrop={lDrop}
           rightDrop={rDrop}
+          boardLeftEnd={boardLeftEnd}
+          boardRightEnd={boardRightEnd}
         />
       )}
       <ContactShadows
