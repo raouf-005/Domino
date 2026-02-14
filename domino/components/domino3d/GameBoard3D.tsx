@@ -57,7 +57,7 @@ export function GameBoard3D({
   rightTeam = null,
 }: GameBoard3DProps) {
   return (
-    <div className="relative w-full rounded-3xl border border-white/10 shadow-2xl bg-linear-to-b from-emerald-900/60 to-emerald-950/80 p-2 h-[50vh] md:h-[65vh] min-h-100 md:min-h-130">
+    <div className="board-wrapper relative w-full rounded-xl sm:rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl bg-linear-to-b from-emerald-900/60 to-emerald-950/80 p-0.5 sm:p-1 md:p-2 h-[45vh] sm:h-[50vh] md:h-[65vh] min-h-60 sm:min-h-75 md:min-h-130">
       <div
         className="absolute inset-0 rounded-3xl pointer-events-none"
         style={{ boxShadow: "inset 0 0 120px rgba(0,0,0,.35)" }}
@@ -107,8 +107,8 @@ export function GameBoard3D({
       )}
       <EndLabels left={boardLeftEnd} right={boardRightEnd} />
       {showTurnOverlay && hand.length > 0 && (
-        <div className="absolute bottom-14 left-0 right-0 flex justify-center pointer-events-none">
-          <span className="text-white/50 text-sm font-medium backdrop-blur-sm bg-black/20 px-3 py-1 rounded-full">
+        <div className="absolute bottom-10 sm:bottom-14 left-0 right-0 flex justify-center pointer-events-none">
+          <span className="text-white/50 text-[10px] sm:text-sm font-medium backdrop-blur-sm bg-black/20 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full">
             Your tiles ({hand.length})
           </span>
         </div>

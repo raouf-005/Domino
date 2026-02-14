@@ -24,7 +24,7 @@ const GameBoard3DNoSSR = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-[50vh] md:h-[65vh] min-h-[400px] md:min-h-[520px] bg-green-900/50 rounded-3xl animate-pulse flex items-center justify-center text-white/50 text-xl">
+      <div className="board-wrapper w-full h-[45vh] sm:h-[50vh] md:h-[65vh] min-h-60 sm:min-h-75 md:min-h-130 bg-green-900/50 rounded-xl sm:rounded-2xl md:rounded-3xl animate-pulse flex items-center justify-center text-white/50 text-sm sm:text-lg md:text-xl">
         Loading 3D Board...
       </div>
     ),
@@ -185,7 +185,7 @@ function PlayerCard({
       transition={{ delay: index * 0.1 }}
       layout
       className={`
-        relative p-4 rounded-3xl backdrop-blur-xl border overflow-hidden group
+        relative p-2 sm:p-4 rounded-2xl sm:rounded-3xl backdrop-blur-xl border overflow-hidden group
         transition-all duration-500 ease-out
         ${
           player
@@ -209,8 +209,9 @@ function PlayerCard({
       )}
 
       {player ? (
-        <div className="relative z-10 flex flex-col h-full justify-between gap-3">
-          <div className="flex items-start justify-between">
+        <div className="relative z-10 flex flex-col h-full justify-between gap-1 sm:gap-3">
+          {/* Desktop: full card */}
+          <div className="hidden sm:flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div
                 className={`
@@ -242,7 +243,34 @@ function PlayerCard({
             </div>
           </div>
 
-          <div className="bg-black/20 rounded-xl p-2.5 flex items-center justify-between border border-white/5">
+          {/* Mobile: compact inline card */}
+          <div className="flex sm:hidden items-center gap-2">
+            <div
+              className={`
+                h-7 w-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0
+                ${player.team === "team1" ? "bg-gradient-to-br from-blue-500 to-indigo-600" : "bg-gradient-to-br from-red-500 to-rose-600"}
+              `}
+            >
+              {player.isAI ? "🤖" : player.name?.charAt(0)?.toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-white text-[11px] leading-tight truncate">
+                {player.name}
+                {isMe && (
+                  <span className="text-[8px] ml-1 text-white/60">(you)</span>
+                )}
+              </p>
+              <div className="flex items-center gap-1 text-[9px] text-white/50">
+                <div
+                  className={`w-1 h-1 rounded-full ${player.isConnected ? "bg-emerald-400" : "bg-red-400"}`}
+                />
+                <span>{player.hand.length} tiles</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop tile count bar */}
+          <div className="hidden sm:flex bg-black/20 rounded-xl p-2.5 items-center justify-between border border-white/5">
             <div className="flex items-center gap-2">
               <span className="text-white/40 text-[10px] uppercase font-bold tracking-wider">
                 Remaining
@@ -271,15 +299,17 @@ function PlayerCard({
           </div>
 
           {!player.isConnected && !player.isAI && (
-            <div className="absolute top-2 right-2 text-yellow-500 animate-pulse text-xs font-bold">
+            <div className="absolute top-1 right-1 sm:top-2 sm:right-2 text-yellow-500 animate-pulse text-[10px] sm:text-xs font-bold">
               ⚠
             </div>
           )}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-6 gap-2 opacity-50">
-          <div className="w-10 h-10 rounded-full bg-white/10 animate-pulse" />
-          <p className="text-xs text-white/50 font-medium">Empty Seat</p>
+        <div className="flex flex-col items-center justify-center py-2 sm:py-6 gap-1 sm:gap-2 opacity-50">
+          <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-white/10 animate-pulse" />
+          <p className="text-[9px] sm:text-xs text-white/50 font-medium">
+            Empty
+          </p>
         </div>
       )}
     </motion.div>
@@ -597,38 +627,38 @@ export default function GamePage() {
   // Login/Join screen
   if (!joined) {
     return (
-      <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
+      <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-2 sm:p-4">
         <AnimatedBackground />
 
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.6, type: "spring", bounce: 0.3 }}
-          className="relative z-10 w-full max-w-lg"
+          className="relative z-10 w-full max-w-lg max-h-[95vh] overflow-y-auto"
         >
           {/* Glow effect */}
           <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-3xl blur-lg opacity-30" />
 
           <div className="relative bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 shadow-2xl overflow-hidden">
             {/* Header */}
-            <div className="px-8 pt-10 pb-6 text-center">
+            <div className="px-4 pt-4 pb-3 sm:px-8 sm:pt-10 sm:pb-6 text-center">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", delay: 0.2 }}
-                className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-emerald-400 to-green-600 rounded-2xl shadow-lg mb-6 transform hover:rotate-6 transition-transform duration-300"
+                className="inline-flex items-center justify-center w-14 h-14 sm:w-24 sm:h-24 bg-gradient-to-br from-emerald-400 to-green-600 rounded-2xl shadow-lg mb-3 sm:mb-6 transform hover:rotate-6 transition-transform duration-300"
               >
-                <span className="text-5xl drop-shadow-md">🁣</span>
+                <span className="text-3xl sm:text-5xl drop-shadow-md">🁣</span>
               </motion.div>
-              <h1 className="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-200 via-white to-teal-200 drop-shadow-sm">
+              <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-200 via-white to-teal-200 drop-shadow-sm">
                 Domino
               </h1>
-              <p className="text-white/60 mt-2 font-medium tracking-wide uppercase text-sm">
+              <p className="text-white/60 mt-1 sm:mt-2 font-medium tracking-wide uppercase text-xs sm:text-sm">
                 Next-Gen Multiplayer
               </p>
             </div>
 
-            <div className="px-8 pb-10 space-y-6">
+            <div className="px-4 pb-6 space-y-4 sm:px-8 sm:pb-10 sm:space-y-6">
               {/* Game Mode Selection */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-white/50 uppercase tracking-widest pl-1">
@@ -828,10 +858,21 @@ export default function GamePage() {
 
   // Main game screen
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden safe-area-pad">
       <AnimatedBackground />
+      <div className="rotate-hint sm:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
+        <div className="flex flex-col items-center gap-4 px-8 py-10 rounded-2xl bg-white/10 border border-white/15 shadow-2xl text-center max-w-[280px]">
+          <span className="rotate-phone-icon text-5xl">📱</span>
+          <p className="text-white font-bold text-lg leading-tight">
+            Rotate Your Phone
+          </p>
+          <p className="text-white/60 text-sm">
+            Turn your device sideways for the best experience
+          </p>
+        </div>
+      </div>
 
-      <div className="relative z-10 p-3 md:p-6 max-w-7xl mx-auto">
+      <div className="game-shell relative z-10 p-3 md:p-6 max-w-7xl mx-auto">
         {/* Error Toast */}
         <AnimatePresence>
           {error && (
@@ -904,10 +945,10 @@ export default function GamePage() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative z-50 bg-black/40 backdrop-blur-xl rounded-2xl p-3 mb-6 flex flex-wrap justify-between items-center gap-4 border border-white/10 shadow-lg"
+          className="game-header hidden sm:flex relative z-50 bg-black/40 backdrop-blur-xl rounded-2xl p-3 mb-6 flex-wrap justify-between items-center gap-4 border border-white/10 shadow-lg"
         >
           <div className="flex items-center gap-4">
-            <div className="bg-white/10 p-2 rounded-xl border border-white/10">
+            <div className="header-logo bg-white/10 p-2 rounded-xl border border-white/10">
               <span className="text-3xl">🁣</span>
             </div>
             <div>
@@ -942,48 +983,90 @@ export default function GamePage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
-            <div className="flex flex-col items-center justify-center px-4 py-1 bg-blue-500/10 rounded-lg border border-blue-500/20 min-w-[80px]">
-              <span className="text-2xl drop-shadow-md">🔵</span>
-              <span className="text-white font-bold text-lg leading-tight">
+          <div className="score-panel flex items-center gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+            <div className="flex flex-col items-center justify-center px-4 py-1 bg-blue-500/10 rounded-lg border border-blue-500/20 min-w-15 sm:min-w-20">
+              <span className="score-icon text-2xl drop-shadow-md">🔵</span>
+              <span className="score-val text-white font-bold text-lg leading-tight">
                 {gameState?.scores.team1 || 0}
               </span>
             </div>
             <div className="h-8 w-px bg-white/10 mx-1"></div>
-            <div className="flex flex-col items-center justify-center px-4 py-1 bg-red-500/10 rounded-lg border border-red-500/20 min-w-[80px]">
-              <span className="text-2xl drop-shadow-md">🔴</span>
-              <span className="text-white font-bold text-lg leading-tight">
+            <div className="flex flex-col items-center justify-center px-4 py-1 bg-red-500/10 rounded-lg border border-red-500/20 min-w-15 sm:min-w-20">
+              <span className="score-icon text-2xl drop-shadow-md">🔴</span>
+              <span className="score-val text-white font-bold text-lg leading-tight">
                 {gameState?.scores.team2 || 0}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="header-actions hidden sm:flex items-center gap-2">
             <button
               onClick={copyRoomCode}
-              className="p-3 rounded-xl bg-white/5 text-white/80 hover:bg-white/10 hover:text-white border border-white/5 transition-all"
+              className="p-2 sm:p-3 rounded-xl bg-white/5 text-white/80 hover:bg-white/10 hover:text-white border border-white/5 transition-all"
               title="Copy Room Code"
             >
               📋
             </button>
             <button
               onClick={() => setShowRules(true)}
-              className="p-3 rounded-xl bg-white/5 text-white/80 hover:bg-white/10 hover:text-white border border-white/5 transition-all"
+              className="p-2 sm:p-3 rounded-xl bg-white/5 text-white/80 hover:bg-white/10 hover:text-white border border-white/5 transition-all hidden sm:block"
               title="Rules"
             >
               ℹ️
             </button>
             <button
               onClick={leaveMatch}
-              className="px-4 py-2.5 rounded-xl bg-red-500/10 text-red-200 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all font-semibold text-sm"
+              className="px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-red-500/10 text-red-200 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all font-semibold text-xs sm:text-sm"
             >
               Exit
             </button>
           </div>
         </motion.div>
 
+        <div className="mobile-hud sm:hidden mb-1 px-2 py-1 rounded-lg bg-black/40 border border-white/10 backdrop-blur-md flex items-center justify-between gap-1">
+          <p className="text-emerald-300 font-mono font-bold text-[11px] truncate">
+            {gameState?.id}
+          </p>
+          <div className="flex items-center gap-1.5">
+            <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-200 text-[10px] font-bold">
+              🔵{gameState?.scores.team1 || 0}
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-200 text-[10px] font-bold">
+              🔴{gameState?.scores.team2 || 0}
+            </span>
+          </div>
+          {currentTurn && (
+            <p className="text-white text-[10px] font-semibold truncate max-w-16">
+              🎯{currentTurn.name}
+            </p>
+          )}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={copyRoomCode}
+              className="p-1 rounded bg-white/10 text-[10px]"
+              title="Copy"
+            >
+              📋
+            </button>
+            <button
+              onClick={() => setShowRules(true)}
+              className="p-1 rounded bg-white/10 text-[10px]"
+              title="Rules"
+            >
+              ℹ️
+            </button>
+            <button
+              onClick={leaveMatch}
+              className="p-1 rounded bg-red-500/20 text-[10px]"
+              title="Exit"
+            >
+              🚪
+            </button>
+          </div>
+        </div>
+
         {/* Players */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="players-row hidden sm:grid grid-cols-4 gap-2 sm:gap-3 mb-4">
           {[0, 1, 2, 3].map((index) => (
             <PlayerCard
               key={index}
@@ -1000,9 +1083,9 @@ export default function GamePage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="max-w-2xl mx-auto mt-8 md:mt-20"
+            className="max-w-2xl mx-auto mt-4 sm:mt-8 md:mt-20"
           >
-            <div className="bg-black/40 backdrop-blur-2xl rounded-3xl p-8 md:p-12 text-center border border-white/10 shadow-2xl relative overflow-hidden">
+            <div className="bg-black/40 backdrop-blur-2xl rounded-2xl sm:rounded-3xl p-4 sm:p-8 md:p-12 text-center border border-white/10 shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent shadow-[0_0_20px_rgba(16,185,129,0.5)]"></div>
 
               <div className="relative z-10">
@@ -1019,21 +1102,24 @@ export default function GamePage() {
                     rotate: { duration: 20, repeat: Infinity, ease: "linear" },
                     filter: { duration: 2, repeat: Infinity },
                   }}
-                  className="inline-block text-7xl mb-6 drop-shadow-[0_0_30px_rgba(16,185,129,0.3)]"
+                  className="inline-block text-4xl sm:text-7xl mb-3 sm:mb-6 drop-shadow-[0_0_30px_rgba(16,185,129,0.3)]"
                 >
                   🁣
                 </motion.div>
 
-                <h2 className="text-4xl font-extrabold text-white mb-2 tracking-tight">
+                <h2 className="text-2xl sm:text-4xl font-extrabold text-white mb-1 sm:mb-2 tracking-tight">
                   Lobby
                 </h2>
-                <p className="text-white/50 text-xl mb-10 font-medium">
+                <p className="text-white/50 text-sm sm:text-xl mb-4 sm:mb-10 font-medium">
                   {gameState.players.length} / 4 Players Ready
                 </p>
 
-                <div className="flex justify-center gap-6 mb-12">
+                <div className="flex justify-center gap-3 sm:gap-6 mb-6 sm:mb-12">
                   {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="flex flex-col items-center gap-3">
+                    <div
+                      key={i}
+                      className="flex flex-col items-center gap-2 sm:gap-3"
+                    >
                       <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
@@ -1044,7 +1130,7 @@ export default function GamePage() {
                         }`}
                       />
                       {gameState.players[i] && (
-                        <div className="w-16 h-1 bg-white/20 rounded-full overflow-hidden">
+                        <div className="w-10 sm:w-16 h-1 bg-white/20 rounded-full overflow-hidden">
                           <motion.div
                             className="h-full bg-emerald-400"
                             initial={{ width: 0 }}
@@ -1063,7 +1149,7 @@ export default function GamePage() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={startGame}
-                    className="w-full max-w-sm px-8 py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-2xl font-bold text-xl shadow-xl shadow-emerald-900/20 hover:shadow-emerald-500/30 transition-all border border-emerald-400/20"
+                    className="w-full max-w-sm px-6 py-3 sm:px-8 sm:py-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl sm:rounded-2xl font-bold text-base sm:text-xl shadow-xl shadow-emerald-900/20 hover:shadow-emerald-500/30 transition-all border border-emerald-400/20"
                   >
                     🚀 Start Game
                   </motion.button>
@@ -1078,23 +1164,24 @@ export default function GamePage() {
                     {/* Auto Fill AI */}
                     <button
                       onClick={autoFillAI}
-                      className="w-full max-w-sm px-6 py-4 rounded-xl bg-gradient-to-r from-purple-500/20 to-violet-600/20 text-purple-200 border border-purple-500/20 hover:from-purple-500/30 hover:to-violet-600/30 transition-all font-bold flex items-center justify-center gap-3 active:scale-95"
+                      className="w-full max-w-sm px-4 py-3 sm:px-6 sm:py-4 rounded-xl bg-gradient-to-r from-purple-500/20 to-violet-600/20 text-purple-200 border border-purple-500/20 hover:from-purple-500/30 hover:to-violet-600/30 transition-all font-bold text-sm sm:text-base flex items-center justify-center gap-2 sm:gap-3 active:scale-95"
                     >
-                      <span className="text-xl">🤖</span> Auto Fill with AI
+                      <span className="text-lg sm:text-xl">🤖</span> Auto Fill
+                      with AI
                     </button>
                   </div>
                 )}
 
-                <div className="mt-8 flex flex-wrap justify-center gap-4">
+                <div className="mt-4 sm:mt-8 flex flex-wrap justify-center gap-2 sm:gap-4">
                   <button
                     onClick={copyRoomCode}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 text-white/80 font-semibold border border-white/10 hover:bg-white/10 hover:text-white transition-all"
+                    className="flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl bg-white/5 text-white/80 font-semibold text-sm sm:text-base border border-white/10 hover:bg-white/10 hover:text-white transition-all"
                   >
                     <span>📋</span> Copy Code
                   </button>
                   <button
                     onClick={leaveMatch}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-red-500/10 text-red-300 font-semibold border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
+                    className="flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl bg-red-500/10 text-red-300 font-semibold text-sm sm:text-base border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
                   >
                     <span>🚪</span> Leave
                   </button>
@@ -1128,23 +1215,25 @@ export default function GamePage() {
               topTeam={topPlayer?.team ?? null}
               rightTeam={rightPlayer?.team ?? null}
             />
-            <div className="mt-6 bg-white/10 backdrop-blur-md rounded-2xl p-4 text-center border border-white/10">
-              <h3 className="text-2xl font-bold text-white mb-2">
+            <div className="mt-3 sm:mt-6 bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/10">
+              <h3 className="text-lg sm:text-2xl font-bold text-white mb-1 sm:mb-2">
                 Game Blocked
               </h3>
-              <p className="text-white/70 mb-4">{gameState.lastAction}</p>
-              <div className="flex flex-wrap justify-center gap-3">
+              <p className="text-white/70 text-xs sm:text-base mb-3 sm:mb-4">
+                {gameState.lastAction}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
                 <button
                   onClick={startGame}
-                  className="px-6 py-3 bg-linear-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold"
+                  className="px-4 py-2 sm:px-6 sm:py-3 bg-linear-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold text-sm sm:text-base"
                 >
-                  Play Another Round
+                  Play Again
                 </button>
                 <button
                   onClick={leaveMatch}
-                  className="px-6 py-3 bg-linear-to-r from-gray-700 to-gray-800 text-white rounded-xl font-semibold"
+                  className="px-4 py-2 sm:px-6 sm:py-3 bg-linear-to-r from-gray-700 to-gray-800 text-white rounded-xl font-semibold text-sm sm:text-base"
                 >
-                  Leave Match
+                  Leave
                 </button>
               </div>
             </div>
@@ -1153,29 +1242,35 @@ export default function GamePage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white/10 backdrop-blur-md rounded-3xl p-8 text-center border border-white/10"
+            className="bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-center border border-white/10"
           >
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="text-7xl mb-4"
+              className="text-4xl sm:text-7xl mb-2 sm:mb-4"
             >
               🎉
             </motion.div>
-            <h2 className="text-4xl font-bold text-white mb-4">Game Over!</h2>
-            <p className="text-white/80 text-xl mb-8">{gameState.lastAction}</p>
+            <h2 className="text-2xl sm:text-4xl font-bold text-white mb-2 sm:mb-4">
+              Game Over!
+            </h2>
+            <p className="text-white/80 text-sm sm:text-xl mb-4 sm:mb-8">
+              {gameState.lastAction}
+            </p>
 
-            <div className="flex justify-center gap-12">
+            <div className="flex justify-center gap-6 sm:gap-12">
               <motion.div
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
                 className="text-center"
               >
-                <span className="text-6xl">🔵</span>
-                <p className="text-white text-2xl font-bold mt-2">Team 1</p>
-                <p className="text-4xl font-bold text-white mt-2">
+                <span className="text-3xl sm:text-6xl">🔵</span>
+                <p className="text-white text-base sm:text-2xl font-bold mt-1 sm:mt-2">
+                  Team 1
+                </p>
+                <p className="text-2xl sm:text-4xl font-bold text-white mt-1 sm:mt-2">
                   {gameState.scores.team1} pts
                 </p>
               </motion.div>
@@ -1185,44 +1280,45 @@ export default function GamePage() {
                 transition={{ delay: 0.5 }}
                 className="text-center"
               >
-                <span className="text-6xl">🔴</span>
-                <p className="text-white text-2xl font-bold mt-2">Team 2</p>
-                <p className="text-4xl font-bold text-white mt-2">
+                <span className="text-3xl sm:text-6xl">🔴</span>
+                <p className="text-white text-base sm:text-2xl font-bold mt-1 sm:mt-2">
+                  Team 2
+                </p>
+                <p className="text-2xl sm:text-4xl font-bold text-white mt-1 sm:mt-2">
                   {gameState.scores.team2} pts
                 </p>
               </motion.div>
             </div>
 
-            <div className="mt-6 text-white/80 text-lg">
+            <div className="mt-3 sm:mt-6 text-white/80 text-xs sm:text-lg">
               {gameState.winner === "draw" ? (
                 <span>
-                  Draw — Team 1 tiles: {teamTotals.team1} pts • Team 2 tiles:{" "}
+                  Draw — Team 1: {teamTotals.team1} pts • Team 2:{" "}
                   {teamTotals.team2} pts
                 </span>
               ) : (
-                <span>Losing team tiles total: {loserPoints ?? 0} pts</span>
+                <span>Losing team tiles: {loserPoints ?? 0} pts</span>
               )}
             </div>
 
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+            <div className="mt-4 sm:mt-8 grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-4 text-left">
               {gameState.players.map((player, idx) => (
                 <div
                   key={`${player.id}-${idx}`}
-                  className="bg-black/20 rounded-2xl p-4 border border-white/10"
+                  className="bg-black/20 rounded-xl sm:rounded-2xl p-2 sm:p-4 border border-white/10"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="text-white font-bold text-lg">
+                    <div className="text-white font-bold text-sm sm:text-lg">
                       {player.name}
                     </div>
-                    <div className="text-white/60 text-sm">
-                      {player.team === "team1" ? "Team 1" : "Team 2"}
+                    <div className="text-white/60 text-[10px] sm:text-sm">
+                      {player.team === "team1" ? "T1" : "T2"}
                     </div>
                   </div>
-                  <div className="text-white/70 text-sm mt-1">
-                    Tiles: {player.hand.length} • Sum: {handSum(player.hand)}{" "}
-                    pts
+                  <div className="text-white/70 text-[10px] sm:text-sm mt-0.5 sm:mt-1">
+                    {player.hand.length} tiles • {handSum(player.hand)} pts
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-2 sm:mt-3 flex flex-wrap gap-1 sm:gap-2">
                     {player.hand.length === 0 ? (
                       <span className="text-white/40 text-sm italic">
                         No tiles
@@ -1241,22 +1337,22 @@ export default function GamePage() {
                 </div>
               ))}
             </div>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <div className="mt-4 sm:mt-8 flex flex-wrap justify-center gap-2 sm:gap-3">
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={startGame}
-                className="px-10 py-4 bg-linear-to-r from-emerald-500 to-green-600 text-white rounded-2xl font-bold text-lg shadow-2xl"
+                className="px-6 py-2.5 sm:px-10 sm:py-4 bg-linear-to-r from-emerald-500 to-green-600 text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg shadow-2xl"
               >
-                Play Another Round
+                Play Again
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={leaveMatch}
-                className="px-10 py-4 bg-linear-to-r from-gray-700 to-gray-800 text-white rounded-2xl font-bold text-lg shadow-2xl"
+                className="px-6 py-2.5 sm:px-10 sm:py-4 bg-linear-to-r from-gray-700 to-gray-800 text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-lg shadow-2xl"
               >
-                Leave Match
+                Leave
               </motion.button>
             </div>
           </motion.div>
@@ -1290,40 +1386,42 @@ export default function GamePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="mt-4 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10"
+          className="chat-section mt-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 overflow-hidden hidden sm:block"
         >
-          <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-            <span>💬</span> Chat
-          </h3>
-          <div className="h-24 overflow-y-auto bg-black/20 rounded-xl p-3 mb-3">
-            {chatMessages.map((msg, idx) => (
-              <motion.p
-                key={idx}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="text-sm mb-1"
+          <div className="px-4 pb-4 pt-3">
+            <h3 className="text-white font-bold mb-3 flex items-center gap-2 text-sm sm:text-base">
+              <span>💬</span> Chat
+            </h3>
+            <div className="h-20 sm:h-24 overflow-y-auto bg-black/20 rounded-xl p-2 sm:p-3 mb-2 sm:mb-3">
+              {chatMessages.map((msg, idx) => (
+                <motion.p
+                  key={idx}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="text-xs sm:text-sm mb-1"
+                >
+                  <strong className="text-white">{msg.playerName}:</strong>{" "}
+                  <span className="text-white/70">{msg.message}</span>
+                </motion.p>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendChat()}
+                placeholder="Type a message..."
+                className="flex-1 px-3 sm:px-4 py-2 sm:py-3 bg-white/10 border border-white/20 rounded-xl text-white text-sm placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
+                maxLength={100}
+              />
+              <button
+                onClick={sendChat}
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl font-semibold text-sm transition-colors"
               >
-                <strong className="text-white">{msg.playerName}:</strong>{" "}
-                <span className="text-white/70">{msg.message}</span>
-              </motion.p>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendChat()}
-              placeholder="Type a message..."
-              className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
-              maxLength={100}
-            />
-            <button
-              onClick={sendChat}
-              className="px-6 py-3 bg-white/20 hover:bg-white/30 text-white rounded-xl font-semibold transition-colors"
-            >
-              Send
-            </button>
+                Send
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>

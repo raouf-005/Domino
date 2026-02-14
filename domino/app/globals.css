@@ -24,3 +24,170 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ────── Mobile / Landscape helpers ────── */
+
+/* Prevent pull-to-refresh & overscroll on mobile */
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe-area insets for notched phones */
+.safe-area-pad {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Landscape-mode utilities (phones held sideways: max-height ≤ 500px + landscape) */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* squeeze outer padding */
+  .game-shell {
+    padding: 4px 6px !important;
+  }
+
+  /* slim header */
+  .game-header {
+    padding: 4px 8px !important;
+    margin-bottom: 4px !important;
+    border-radius: 12px !important;
+    gap: 6px !important;
+  }
+  .game-header h1 {
+    font-size: 0.85rem !important;
+  }
+  .game-header .header-logo {
+    display: none !important;
+  }
+  .game-header .score-panel {
+    gap: 2px !important;
+  }
+  .game-header .score-panel span {
+    font-size: 0.75rem !important;
+  }
+  .game-header .score-panel .score-icon {
+    font-size: 1rem !important;
+  }
+  .game-header .score-panel .score-val {
+    font-size: 1rem !important;
+  }
+  .game-header .header-actions button {
+    padding: 4px 8px !important;
+    font-size: 0.7rem !important;
+  }
+
+  /* smaller player cards row */
+  .players-row {
+    gap: 4px !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* board takes maximum height */
+  .board-wrapper {
+    height: calc(100vh - 100px) !important;
+    min-height: unset !important;
+  }
+
+  /* chat completely hidden in landscape */
+  .chat-section {
+    display: none !important;
+  }
+
+  /* turn overlay smaller text */
+  .turn-overlay span {
+    font-size: 0.8rem !important;
+    padding: 4px 10px !important;
+  }
+  .turn-overlay button {
+    font-size: 0.75rem !important;
+    padding: 6px 12px !important;
+  }
+
+  /* end labels smaller */
+  .end-labels span {
+    font-size: 0.75rem !important;
+    padding: 2px 6px !important;
+  }
+}
+
+/* General small-screen (any orientation) adjustments */
+@media (max-width: 640px) {
+  .game-shell {
+    padding: 2px 4px 6px !important;
+  }
+
+  .game-header {
+    padding: 6px 10px !important;
+    margin-bottom: 4px !important;
+    gap: 4px !important;
+  }
+  .game-header h1 {
+    font-size: 0.9rem !important;
+  }
+  .game-header .header-logo {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 4px !important;
+  }
+  .game-header .header-logo span {
+    font-size: 1.3rem !important;
+  }
+
+  .players-row {
+    gap: 4px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .board-wrapper {
+    height: calc(100vh - 80px) !important; /* canvas fills almost full screen */
+    min-height: unset !important;
+    border-radius: 12px !important;
+    padding: 2px !important;
+  }
+
+  .mobile-hud {
+    margin-bottom: 2px !important;
+  }
+}
+
+/* Rotate-hint: hidden by default, shown only in portrait on small screens */
+.rotate-hint {
+  display: none;
+}
+@media (max-width: 640px) and (orientation: portrait) {
+  .rotate-hint {
+    display: flex;
+  }
+}
+/* Hide rotate-hint in landscape (redundant – phone is already sideways) */
+@media (max-width: 640px) and (orientation: landscape) {
+  .rotate-hint {
+    display: none !important;
+  }
+  /* Give back the padding to game-shell since hint is hidden */
+  .game-shell {
+    padding-top: 4px !important;
+  }
+}
+
+/* Rotate-phone icon wobble animation */
+@keyframes phone-wobble {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(90deg);
+  }
+  50% {
+    transform: rotate(90deg);
+  }
+  75% {
+    transform: rotate(0deg);
+  }
+}
+.rotate-phone-icon {
+  animation: phone-wobble 2.5s ease-in-out infinite;
+}
