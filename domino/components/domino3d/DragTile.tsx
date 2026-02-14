@@ -58,16 +58,30 @@ export function DragTile({
     rest.current.set(ox, handY, handZ);
   }, [ox]);
 
+  // Is the board empty? (both drops at origin)
+  const boardEmpty = useMemo(
+    () =>
+      leftDrop[0] === 0 &&
+      leftDrop[2] === 0 &&
+      rightDrop[0] === 0 &&
+      rightDrop[2] === 0,
+    [leftDrop, rightDrop],
+  );
+
   // Are the two drop zones close enough to cause confusion?
   const dropsAreClose = useMemo(() => {
+    if (boardEmpty) return false; // no ambiguity when board is empty
     const dx = leftDrop[0] - rightDrop[0];
     const dz = leftDrop[2] - rightDrop[2];
     return Math.hypot(dx, dz) < AMBIGUOUS_DIST;
-  }, [leftDrop, rightDrop]);
+  }, [leftDrop, rightDrop, boardEmpty]);
 
   // Does this tile play on both sides AND drops are close?
   const needsPicker =
-    sides.includes("left") && sides.includes("right") && dropsAreClose;
+    !boardEmpty &&
+    sides.includes("left") &&
+    sides.includes("right") &&
+    dropsAreClose;
 
   // Smooth return when not dragging
   useFrame(() => {
@@ -147,7 +161,10 @@ export function DragTile({
     onDrag(false, []);
     gl.domElement.style.cursor = "auto";
 
-    if (near) {
+    if (boardEmpty) {
+      // First tile — side doesn't matter, just play it
+      onPlay(domino.id, "left");
+    } else if (near) {
       if (needsPicker) {
         // Don't auto-play — show the side picker instead
         setShowPicker(true);
@@ -156,7 +173,7 @@ export function DragTile({
       }
     }
     setNear(null);
-  }, [near, onPlay, domino.id, gl.domElement, onDrag, needsPicker]);
+  }, [near, onPlay, domino.id, gl.domElement, onDrag, needsPicker, boardEmpty]);
 
   const pickSide = useCallback(
     (side: Side) => {
