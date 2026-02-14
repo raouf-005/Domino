@@ -57,10 +57,7 @@ export function GameBoard3D({
   rightTeam = null,
 }: GameBoard3DProps) {
   return (
-    <div
-      className="relative w-full rounded-3xl border border-white/10 shadow-2xl bg-linear-to-b from-emerald-900/60 to-emerald-950/80 p-2"
-      style={{ height: "65vh", minHeight: 520 }}
-    >
+    <div className="relative w-full rounded-3xl border border-white/10 shadow-2xl bg-linear-to-b from-emerald-900/60 to-emerald-950/80 p-2 h-[50vh] md:h-[65vh] min-h-100 md:min-h-130">
       <div
         className="absolute inset-0 rounded-3xl pointer-events-none"
         style={{ boxShadow: "inset 0 0 120px rgba(0,0,0,.35)" }}

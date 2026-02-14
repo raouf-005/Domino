@@ -57,17 +57,25 @@ export interface ServerToClientEvents {
   ) => void;
   error: (message: string) => void;
   chatMessage: (data: { playerName: string; message: string }) => void;
+  reconnected: (data: { gameId: string; playerName: string }) => void;
 }
 
 export interface ClientToServerEvents {
-  joinGame: (data: { gameId: string; playerName: string; team: Team }) => void;
+  joinGame: (data: {
+    gameId: string;
+    playerName: string;
+    team: Team;
+    deviceId: string;
+  }) => void;
   createAIGame: (data: {
     gameId: string;
     playerName: string;
     team: Team;
     gameMode: GameMode;
     aiDifficulty: AIDifficulty;
+    deviceId: string;
   }) => void;
+  reconnectGame: (data: { deviceId: string }) => void;
   startGame: (gameId: string) => void;
   playDomino: (data: {
     gameId: string;
@@ -76,6 +84,12 @@ export interface ClientToServerEvents {
   }) => void;
   pass: (gameId: string) => void;
   sendChat: (data: { gameId: string; message: string }) => void;
+  addAIPlayer: (data: {
+    gameId: string;
+    team?: Team;
+    difficulty: AIDifficulty;
+  }) => void;
+  autoFillAI: (data: { gameId: string; difficulty?: AIDifficulty }) => void;
 }
 
 // Generate all 28 dominoes

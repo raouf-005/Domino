@@ -28,18 +28,66 @@ const handler = app.getRequestHandler();
 const games: Map<string, GameState> = new Map();
 const playerSockets: Map<string, string> = new Map(); // socketId -> playerId
 
+// Device-based session tracking for reconnection
+// deviceId -> { playerId, gameId, playerName }
+const deviceSessions: Map<
+  string,
+  { playerId: string; gameId: string; playerName: string }
+> = new Map();
+
 // AI Names
-const AI_NAMES = [
-  "🤖 Bot Alpha",
-  "🤖 Bot Beta",
-  "🤖 Bot Gamma",
-  "🤖 Bot Delta",
+const AI_NAMES = ["Bot Alpha", "Bot Beta", "Bot Gamma", "Bot Delta"];
+
+const AI_WEIGHT_PRESETS: Array<
+  Record<
+    | "board_control"
+    | "blocking"
+    | "hand_safety"
+    | "tempo"
+    | "partnership"
+    | "prediction",
+    number
+  >
+> = [
+  {
+    board_control: 0.2014498660662075,
+    blocking: 0.24908829220870865,
+    hand_safety: 0.24537179204042062,
+    tempo: 0.3040900496846632,
+    partnership: 0.0,
+    prediction: 0.0,
+  },
+  {
+    board_control: 0.25304110495272236,
+    blocking: 0.2724435351947136,
+    hand_safety: 0.2587932248933106,
+    tempo: 0.21572213495925355,
+    partnership: 0.0,
+    prediction: 0.0,
+  },
+  {
+    board_control: 0.17506381959753758,
+    blocking: 0.33263144184289395,
+    hand_safety: 0.3333154338599927,
+    tempo: 0.15898930469957576,
+    partnership: 0.0,
+    prediction: 0.0,
+  },
+  {
+    board_control: 0.28163152547688874,
+    blocking: 0.23428658809204297,
+    hand_safety: 0.22462572462271846,
+    tempo: 0.25624735170259827,
+    partnership: 0.00320881010575162,
+    prediction: 0.0,
+  },
 ];
 
 class LearningAI {
   playerId: string;
   style: "learning";
   difficulty: AIDifficulty;
+  trainingEnabled: boolean;
   learningRate: number;
   qTable: Map<string, Map<string, number>>;
   strategyWeights: Record<
@@ -70,10 +118,21 @@ class LearningAI {
     style: "learning" = "learning",
     learningRate = 0.1,
     difficulty: AIDifficulty = "medium",
+    trainingEnabled = false,
+    weightsOverride?: Record<
+      | "board_control"
+      | "blocking"
+      | "hand_safety"
+      | "tempo"
+      | "partnership"
+      | "prediction",
+      number
+    >,
   ) {
     this.playerId = playerId;
     this.style = style;
     this.difficulty = difficulty;
+    this.trainingEnabled = trainingEnabled;
     this.learningRate = learningRate;
     this.qTable = new Map();
     this.strategyWeights = this.initializeWeights();
@@ -91,7 +150,15 @@ class LearningAI {
     this.numberCounts = [0, 0, 0, 0, 0, 0, 0];
     this.estimatedOpponentHands = new Map();
 
-    this.applyDifficultyProfile();
+    if (weightsOverride) {
+      this.strategyWeights = weightsOverride;
+      this.epsilon = 0.05;
+      this.minEpsilon = 0.05;
+      this.epsilonDecay = 1;
+      this.qWeight = 0;
+      this.heuristicWeight = 1;
+      this.predictionWeight = 0;
+    }
   }
 
   initializeWeights() {
@@ -108,78 +175,6 @@ class LearningAI {
       (k) => (baseWeights[k] /= total),
     );
     return baseWeights;
-  }
-
-  applyDifficultyProfile() {
-    const profiles: Record<
-      AIDifficulty,
-      {
-        weights: Record<
-          | "board_control"
-          | "blocking"
-          | "hand_safety"
-          | "tempo"
-          | "partnership"
-          | "prediction",
-          number
-        >;
-        epsilon: number;
-        qWeight: number;
-        heuristicWeight: number;
-        predictionWeight: number;
-      }
-    > = {
-      easy: {
-        weights: {
-          board_control: 0.3268,
-          blocking: 0.1971,
-          hand_safety: 0.1738,
-          tempo: 0.3219,
-          partnership: -0.0196,
-          prediction: 0,
-        },
-        epsilon: 0.35,
-        qWeight: 0.0,
-        heuristicWeight: 0.7,
-        predictionWeight: 0.3,
-      },
-      medium: {
-        weights: {
-          board_control: 0.3212,
-          blocking: 0.1673,
-          hand_safety: 0.227,
-          tempo: 0.2641,
-          partnership: 0.0204,
-          prediction: 0,
-        },
-        epsilon: 0.2,
-        qWeight: 0.3,
-        heuristicWeight: 0.4,
-        predictionWeight: 0.3,
-      },
-      hard: {
-        weights: {
-          board_control: 0.1999,
-          blocking: 0.2775,
-          hand_safety: 0.2974,
-          tempo: 0.2118,
-          partnership: 0.0134,
-          prediction: 0,
-        },
-        epsilon: 0.1,
-        qWeight: 0.6,
-        heuristicWeight: 0.2,
-        predictionWeight: 0.2,
-      },
-    };
-
-    const profile = profiles[this.difficulty];
-    if (!profile) return;
-    this.strategyWeights = profile.weights;
-    this.epsilon = profile.epsilon;
-    this.qWeight = profile.qWeight;
-    this.heuristicWeight = profile.heuristicWeight;
-    this.predictionWeight = profile.predictionWeight;
   }
 
   getStateKey(game: GameState, player: Player): string {
@@ -473,6 +468,7 @@ class LearningAI {
   }
 
   learnFromGame(game: GameState, result: "win" | "loss" | "draw") {
+    if (!this.trainingEnabled) return;
     this.gamesPlayed += 1;
 
     const winningPoints =
@@ -550,9 +546,20 @@ function createAIPlayer(
     isAI: true,
     aiDifficulty: difficulty,
   };
+
+  const presetIndex = AI_NAMES.indexOf(name);
+  const weightsOverride =
+    presetIndex >= 0 ? AI_WEIGHT_PRESETS[presetIndex] : undefined;
   learningAIs.set(
     player.id,
-    new LearningAI(player.id, "learning", 0.1, difficulty),
+    new LearningAI(
+      player.id,
+      "learning",
+      0.1,
+      difficulty,
+      false,
+      weightsOverride,
+    ),
   );
   return player;
 }
@@ -567,6 +574,7 @@ function dealDominoes(game: GameState): void {
 }
 
 function resetRound(game: GameState): void {
+  (game as any)._lastWinner = game.winner;
   game.board = [];
   game.boardLeftEnd = -1;
   game.boardRightEnd = -1;
@@ -907,10 +915,68 @@ app.prepare().then(() => {
   io.on("connection", (socket) => {
     console.log(`Client connected: ${socket.id}`);
 
+    // Reconnect handler – client sends its deviceId, server finds their session
+    socket.on("reconnectGame", ({ deviceId }) => {
+      if (!deviceId) {
+        socket.emit("error", "No device ID provided.");
+        return;
+      }
+
+      const session = deviceSessions.get(deviceId);
+      if (!session) {
+        socket.emit("error", "No active session found for this device.");
+        return;
+      }
+
+      const game = games.get(session.gameId);
+      if (!game) {
+        deviceSessions.delete(deviceId);
+        socket.emit("error", "Game no longer exists.");
+        return;
+      }
+
+      const player = game.players.find((p) => p.id === session.playerId);
+      if (!player) {
+        deviceSessions.delete(deviceId);
+        socket.emit("error", "Player no longer in game.");
+        return;
+      }
+
+      // Swap old socket id with new one
+      const oldSocketId = player.id;
+      player.id = socket.id;
+      player.isConnected = true;
+      session.playerId = socket.id;
+
+      playerSockets.delete(oldSocketId);
+      playerSockets.set(socket.id, player.id);
+
+      socket.join(session.gameId);
+      game.lastAction = `${player.name} reconnected`;
+      console.log(
+        `[Reconnect] ${player.name} (device=${deviceId}) rejoined game ${session.gameId}`,
+      );
+
+      socket.emit("reconnected", {
+        gameId: session.gameId,
+        playerName: player.name,
+      });
+      io.to(session.gameId).emit("gameState", game);
+
+      // If it's this player's turn and they're not AI, they can now play
+      if (
+        game.gamePhase === "playing" &&
+        game.players[game.currentPlayerIndex]?.id === socket.id &&
+        !player.isAI
+      ) {
+        // Nothing extra needed – the client will see the gameState and can act
+      }
+    });
+
     // Create AI Game handler
     socket.on(
       "createAIGame",
-      ({ gameId, playerName, team, gameMode, aiDifficulty }) => {
+      ({ gameId, playerName, team, gameMode, aiDifficulty, deviceId }) => {
         let game = games.get(gameId);
 
         if (game) {
@@ -937,6 +1003,15 @@ app.prepare().then(() => {
 
         game.players.push(humanPlayer);
         playerSockets.set(socket.id, humanPlayer.id);
+
+        // Store device session for reconnection
+        if (deviceId) {
+          deviceSessions.set(deviceId, {
+            playerId: socket.id,
+            gameId,
+            playerName,
+          });
+        }
 
         // Add AI players based on game mode
         if (gameMode === "vs-ai") {
@@ -977,7 +1052,7 @@ app.prepare().then(() => {
       },
     );
 
-    socket.on("joinGame", ({ gameId, playerName, team }) => {
+    socket.on("joinGame", ({ gameId, playerName, team, deviceId }) => {
       let game = games.get(gameId);
 
       if (!game) {
@@ -1014,6 +1089,15 @@ app.prepare().then(() => {
 
       game.players.push(player);
       playerSockets.set(socket.id, player.id);
+
+      // Store device session for reconnection
+      if (deviceId) {
+        deviceSessions.set(deviceId, {
+          playerId: socket.id,
+          gameId,
+          playerName,
+        });
+      }
 
       // Sort players: team1, team2, team1, team2
       game.players.sort((a, b) => {
@@ -1066,8 +1150,18 @@ app.prepare().then(() => {
       // Deal dominoes
       dealDominoes(game);
 
-      // Find starting player (highest double)
-      game.currentPlayerIndex = findStartingPlayer(game);
+      // If a team won the last round, the first player on that team starts (can play any tile)
+      const lastWinner = (game as any)._lastWinner as Team | "draw" | null;
+      if (lastWinner && lastWinner !== "draw") {
+        const firstWinnerIdx = game.players.findIndex(
+          (p) => p.team === lastWinner,
+        );
+        game.currentPlayerIndex =
+          firstWinnerIdx >= 0 ? firstWinnerIdx : findStartingPlayer(game);
+      } else {
+        game.currentPlayerIndex = findStartingPlayer(game);
+      }
+      (game as any)._lastWinner = null;
       game.gamePhase = "playing";
       game.lastAction = `Game started! ${game.players[game.currentPlayerIndex].name}'s turn`;
 
@@ -1221,6 +1315,134 @@ app.prepare().then(() => {
       }
     });
 
+    socket.on("addAIPlayer", ({ gameId, team, difficulty }) => {
+      console.log(
+        `[Server] addAIPlayer request: gameId=${gameId}, team=${team}, diff=${difficulty}`,
+      );
+      const game = games.get(gameId);
+      if (!game) {
+        socket.emit("error", "Game not found!");
+        return;
+      }
+
+      // Clear disconnected humans in lobby to free seats
+      if (game.gamePhase === "waiting") {
+        game.players = game.players.filter((p) => p.isConnected || p.isAI);
+      }
+
+      if (game.gamePhase !== "waiting") {
+        socket.emit("error", "Cannot add AI during active game!");
+        return;
+      }
+
+      if (game.players.length >= 4) {
+        socket.emit("error", "Lobby is full!");
+        return;
+      }
+
+      // Determine team if not specified
+      let targetTeam: Team = team || "team1";
+      if (!team) {
+        const team1Count = game.players.filter(
+          (p) => p.team === "team1",
+        ).length;
+        const team2Count = game.players.filter(
+          (p) => p.team === "team2",
+        ).length;
+        targetTeam = team1Count <= team2Count ? "team1" : "team2";
+      }
+
+      // Validate team has space (max 2 per team)
+      const teamCount = game.players.filter(
+        (p) => p.team === targetTeam,
+      ).length;
+      if (teamCount >= 2) {
+        // Try other team
+        targetTeam = targetTeam === "team1" ? "team2" : "team1";
+        if (game.players.filter((p) => p.team === targetTeam).length >= 2) {
+          socket.emit("error", "Both teams are full!");
+          return;
+        }
+      }
+
+      // Pick a unique AI Name
+      const usedNames = new Set(game.players.map((p) => p.name));
+      const availableNames = AI_NAMES.filter((n) => !usedNames.has(n));
+      const aiName =
+        availableNames[0] || `Bot ${Math.floor(Math.random() * 1000)}`;
+
+      const aiDifficulty = difficulty ?? game.aiDifficulty ?? "medium";
+      const newBot = createAIPlayer(aiName, targetTeam, aiDifficulty);
+      game.players.push(newBot);
+
+      // Re-sort players to maintain turn order T1, T2, T1, T2
+      const team1Players = game.players.filter((p) => p.team === "team1");
+      const team2Players = game.players.filter((p) => p.team === "team2");
+      game.players = [];
+      for (let i = 0; i < 2; i++) {
+        if (team1Players[i]) game.players.push(team1Players[i]);
+        if (team2Players[i]) game.players.push(team2Players[i]);
+      }
+
+      game.lastAction = `${newBot.name} (AI) added to ${targetTeam === "team1" ? "Team 1" : "Team 2"}`;
+      io.to(gameId).emit("gameState", game);
+    });
+
+    socket.on("autoFillAI", ({ gameId, difficulty }) => {
+      console.log(
+        `[Server] autoFillAI request: gameId=${gameId}, diff=${difficulty}`,
+      );
+      const game = games.get(gameId);
+      if (!game) {
+        socket.emit("error", "Game not found!");
+        return;
+      }
+
+      if (game.gamePhase !== "waiting") {
+        socket.emit("error", "Cannot add AI during active game!");
+        return;
+      }
+
+      // Clear disconnected humans to free seats
+      game.players = game.players.filter((p) => p.isConnected || p.isAI);
+
+      const diff = difficulty ?? game.aiDifficulty ?? "medium";
+      let added = 0;
+
+      while (game.players.length < 4) {
+        // Pick team with fewer players
+        const t1 = game.players.filter((p) => p.team === "team1").length;
+        const t2 = game.players.filter((p) => p.team === "team2").length;
+        let targetTeam: Team;
+        if (t1 <= t2 && t1 < 2) targetTeam = "team1";
+        else if (t2 < 2) targetTeam = "team2";
+        else break;
+
+        const usedNames = new Set(game.players.map((p) => p.name));
+        const availableNames = AI_NAMES.filter((n) => !usedNames.has(n));
+        const aiName =
+          availableNames[0] || `Bot ${Math.floor(Math.random() * 1000)}`;
+        const newBot = createAIPlayer(aiName, targetTeam, diff);
+        game.players.push(newBot);
+        added++;
+      }
+
+      // Re-sort players: T1, T2, T1, T2
+      const team1Players = game.players.filter((p) => p.team === "team1");
+      const team2Players = game.players.filter((p) => p.team === "team2");
+      game.players = [];
+      for (let i = 0; i < 2; i++) {
+        if (team1Players[i]) game.players.push(team1Players[i]);
+        if (team2Players[i]) game.players.push(team2Players[i]);
+      }
+
+      game.lastAction =
+        added > 0
+          ? `${added} AI player${added > 1 ? "s" : ""} added to the lobby`
+          : "Lobby is already full";
+      io.to(gameId).emit("gameState", game);
+    });
+
     socket.on("sendChat", ({ gameId, message }) => {
       const game = games.get(gameId);
       if (!game) return;
@@ -1234,13 +1456,29 @@ app.prepare().then(() => {
     socket.on("disconnect", () => {
       console.log(`Client disconnected: ${socket.id}`);
 
-      // Find and mark player as disconnected
+      // Find and mark player as disconnected (keep deviceSession so they can reconnect)
       games.forEach((game, gameId) => {
         const player = game.players.find((p) => p.id === socket.id);
         if (player) {
           player.isConnected = false;
           game.lastAction = `${player.name} disconnected`;
           io.to(gameId).emit("gameState", game);
+
+          // If the game is finished or all humans disconnected in waiting phase, clean up sessions
+          const allHumansDisconnected = game.players
+            .filter((p) => !p.isAI)
+            .every((p) => !p.isConnected);
+          if (
+            game.gamePhase === "finished" ||
+            (game.gamePhase === "waiting" && allHumansDisconnected)
+          ) {
+            // Clean up device sessions for this game
+            for (const [devId, session] of deviceSessions) {
+              if (session.gameId === gameId) {
+                deviceSessions.delete(devId);
+              }
+            }
+          }
         }
       });
 

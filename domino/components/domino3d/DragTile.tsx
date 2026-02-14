@@ -8,6 +8,11 @@ import type { Domino } from "../../lib/gameTypes";
 import type { Side, Vec3 } from "./types";
 import { DominoPiece } from "./DominoPiece";
 
+/** Distance between two drop-zone centres below which we show a picker */
+const AMBIGUOUS_DIST = 8;
+/** Each drop-zone's detection radius */
+const DROP_THRESHOLD = 4;
+
 interface DragTileProps {
   domino: Domino;
   index: number;
@@ -38,6 +43,8 @@ export function DragTile({
   const [isDrag, setDrag] = useState(false);
   const [hover, setHover] = useState(false);
   const [near, setNear] = useState<Side | null>(null);
+  /** When true, we show L/R picker instead of auto-dropping */
+  const [showPicker, setShowPicker] = useState(false);
   const offset = useRef(new THREE.Vector3());
   const rest = useRef(new THREE.Vector3());
   const { camera, gl } = useThree();
@@ -50,6 +57,17 @@ export function DragTile({
   useEffect(() => {
     rest.current.set(ox, handY, handZ);
   }, [ox]);
+
+  // Are the two drop zones close enough to cause confusion?
+  const dropsAreClose = useMemo(() => {
+    const dx = leftDrop[0] - rightDrop[0];
+    const dz = leftDrop[2] - rightDrop[2];
+    return Math.hypot(dx, dz) < AMBIGUOUS_DIST;
+  }, [leftDrop, rightDrop]);
+
+  // Does this tile play on both sides AND drops are close?
+  const needsPicker =
+    sides.includes("left") && sides.includes("right") && dropsAreClose;
 
   // Smooth return when not dragging
   useFrame(() => {
@@ -80,7 +98,7 @@ export function DragTile({
 
   const down = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
-      if (!playable || !myTurn) return;
+      if (!playable || !myTurn || showPicker) return;
       e.stopPropagation();
       dragging.current = true;
       setDrag(true);
@@ -90,7 +108,7 @@ export function DragTile({
       if (hit && group.current)
         offset.current.copy(group.current.position).sub(hit);
     },
-    [playable, myTurn, gl.domElement, rayHit, onDrag, sides],
+    [playable, myTurn, gl.domElement, rayHit, onDrag, sides, showPicker],
   );
 
   const move = useCallback(
@@ -104,12 +122,22 @@ export function DragTile({
         pz = p.z;
       const dL = Math.hypot(px - leftDrop[0], pz - leftDrop[2]);
       const dR = Math.hypot(px - rightDrop[0], pz - rightDrop[2]);
-      const th = 4;
-      if (dL < th && sides.includes("left")) setNear("left");
-      else if (dR < th && sides.includes("right")) setNear("right");
-      else setNear(null);
+      const th = DROP_THRESHOLD;
+
+      if (needsPicker) {
+        // When zones overlap, highlight the CLOSER one but don't commit
+        if (dL < th || dR < th) {
+          setNear(dL <= dR ? "left" : "right");
+        } else {
+          setNear(null);
+        }
+      } else {
+        if (dL < th && sides.includes("left")) setNear("left");
+        else if (dR < th && sides.includes("right")) setNear("right");
+        else setNear(null);
+      }
     },
-    [rayHit, leftDrop, rightDrop, sides],
+    [rayHit, leftDrop, rightDrop, sides, needsPicker],
   );
 
   const up = useCallback(() => {
@@ -118,9 +146,29 @@ export function DragTile({
     setDrag(false);
     onDrag(false, []);
     gl.domElement.style.cursor = "auto";
-    if (near) onPlay(domino.id, near);
+
+    if (near) {
+      if (needsPicker) {
+        // Don't auto-play — show the side picker instead
+        setShowPicker(true);
+      } else {
+        onPlay(domino.id, near);
+      }
+    }
     setNear(null);
-  }, [near, onPlay, domino.id, gl.domElement, onDrag]);
+  }, [near, onPlay, domino.id, gl.domElement, onDrag, needsPicker]);
+
+  const pickSide = useCallback(
+    (side: Side) => {
+      setShowPicker(false);
+      onPlay(domino.id, side);
+    },
+    [domino.id, onPlay],
+  );
+
+  const cancelPicker = useCallback(() => {
+    setShowPicker(false);
+  }, []);
 
   useEffect(() => {
     if (!isDrag) return;
@@ -152,7 +200,7 @@ export function DragTile({
       onPointerDown={down}
       onPointerOver={() => {
         setHover(true);
-        if (can) gl.domElement.style.cursor = "grab";
+        if (can && !showPicker) gl.domElement.style.cursor = "grab";
       }}
       onPointerOut={() => {
         setHover(false);
@@ -163,14 +211,22 @@ export function DragTile({
         domino={domino}
         targetPos={[0, 0, 0]}
         targetRot={[-Math.PI * 0.4, 0, 0]}
-        scale={isDrag ? 1.15 : 1}
-        color={isDrag ? "#fffde0" : !can ? "#999" : "#f5f5f0"}
-        emissive={glow}
-        emissiveIntensity={gi}
+        scale={isDrag ? 1.15 : showPicker ? 1.1 : 1}
+        color={
+          isDrag
+            ? "#fffde0"
+            : showPicker
+              ? "#fff8cc"
+              : !can
+                ? "#999"
+                : "#f5f5f0"
+        }
+        emissive={showPicker ? "#ffd700" : glow}
+        emissiveIntensity={showPicker ? 0.5 : gi}
       />
 
       {/* Hover tooltip */}
-      {hover && can && !isDrag && (
+      {hover && can && !isDrag && !showPicker && (
         <Html center position={[0, 1.8, 0]} distanceFactor={8}>
           <div
             className="bg-black/80 text-white px-2 py-1 rounded-lg text-xs font-bold whitespace-nowrap"
@@ -181,14 +237,52 @@ export function DragTile({
         </Html>
       )}
 
-      {/* Near-drop indicator */}
-      {isDrag && near && (
+      {/* Near-drop indicator (only when NOT showing picker) */}
+      {isDrag && near && !showPicker && (
         <Html center position={[0, 2, 0]} distanceFactor={8}>
           <div
-            className="bg-yellow-400 text-black px-3 py-1 rounded-full text-sm font-bold whitespace-nowrap animate-bounce"
+            className={`px-3 py-1 rounded-full text-sm font-bold whitespace-nowrap animate-bounce ${
+              near === "left"
+                ? "bg-blue-400 text-blue-900"
+                : "bg-orange-400 text-orange-900"
+            }`}
             style={{ pointerEvents: "none" }}
           >
-            Drop on {near}!
+            Drop on {near} end
+          </div>
+        </Html>
+      )}
+
+      {/* ── Side picker popup when both sides are close ── */}
+      {showPicker && (
+        <Html center position={[0, 2.6, 0]} distanceFactor={7}>
+          <div
+            className="flex flex-col items-center gap-2 select-none"
+            style={{ pointerEvents: "auto" }}
+          >
+            <div className="bg-black/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap mb-1 shadow-xl border border-white/20">
+              Which end?
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => pickSide("left")}
+                className="px-5 py-2.5 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-blue-300/50"
+              >
+                ← Left
+              </button>
+              <button
+                onClick={() => pickSide("right")}
+                className="px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-orange-300/50"
+              >
+                Right →
+              </button>
+            </div>
+            <button
+              onClick={cancelPicker}
+              className="px-3 py-1 text-white/50 hover:text-white/80 text-xs mt-1 transition-colors"
+            >
+              Cancel
+            </button>
           </div>
         </Html>
       )}
