@@ -203,49 +203,24 @@ function buildSnakeLayout(board: Domino[]): LayoutItem[] {
     }
   }
 
-  // ── Phase 5: Scale to fill ~60% of board ──
-  const xs = centered.map((it) => it.x);
-  const zs = centered.map((it) => it.z);
-  const spanX = Math.max(...xs) - Math.min(...xs) + TILE_L; // add tile size
-  const spanZ = Math.max(...zs) - Math.min(...zs) + TILE_L;
-
-  const targetX = TABLE_W * 0.6;
-  const targetZ = TABLE_H * 0.6;
-  const sx = spanX > 0.1 ? targetX / spanX : 1;
-  const sz = spanZ > 0.1 ? targetZ / spanZ : 1;
-  const uniformScale = Math.min(sx, sz);
-
-  // Only scale up if tiles are too small; also allow slight downscale
-  if (Math.abs(uniformScale - 1) > 0.05) {
-    const clampedScale = Math.min(1.8, Math.max(0.5, uniformScale));
-    for (const it of centered) {
-      it.x *= clampedScale;
-      it.z *= clampedScale;
-    }
-  }
-
   return centered;
 }
 
 function makePips(value: number, top: boolean) {
   const group = new THREE.Group();
-  const pipGeo = new THREE.CircleGeometry(0.085, 24);
-  const pipMat = new THREE.MeshBasicMaterial({
+  const pipGeo = new THREE.SphereGeometry(0.075, 16, 12);
+  const pipMat = new THREE.MeshStandardMaterial({
     color: "#111827",
-    side: THREE.DoubleSide,
-    depthTest: true,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1,
+    roughness: 0.6,
+    metalness: 0.1,
   });
 
-  const yBase = TILE_H / 2 + 0.005;
+  const yBase = TILE_H / 2 + 0.035;
   const zShift = top ? -TILE_L * 0.25 : TILE_L * 0.25;
 
   for (const [px, pz] of PIP_LAYOUT[value] ?? []) {
     const pip = new THREE.Mesh(pipGeo, pipMat);
     pip.position.set(px * TILE_W * 0.86, yBase, zShift + pz * TILE_L * 0.58);
-    pip.rotation.x = -Math.PI / 2;
     group.add(pip);
   }
 
