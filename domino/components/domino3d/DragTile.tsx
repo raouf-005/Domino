@@ -287,7 +287,7 @@ export function DragTile({
             <div className="flex gap-3">
               <button
                 onClick={() => pickSide("left")}
-                className="flex flex-col items-center px-5 py-2.5 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-blue-300/50 min-w-[72px]"
+                className="flex flex-col items-center px-5 py-2.5 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-blue-300/50 min-w-18"
               >
                 <span className="text-[10px] opacity-70 mb-0.5">
                   end = {boardLeftEnd}
@@ -296,7 +296,7 @@ export function DragTile({
               </button>
               <button
                 onClick={() => pickSide("right")}
-                className="flex flex-col items-center px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-orange-300/50 min-w-[72px]"
+                className="flex flex-col items-center px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-white rounded-xl font-bold text-sm shadow-lg transition-all hover:scale-110 active:scale-95 border-2 border-orange-300/50 min-w-18"
               >
                 <span className="text-[10px] opacity-70 mb-0.5">
                   end = {boardRightEnd}

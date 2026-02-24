@@ -627,14 +627,14 @@ export default function GamePage() {
   // Login/Join screen
   if (!joined) {
     return (
-      <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-2 sm:p-4">
+      <div className="min-h-screen relative  flex items-center justify-center p-2 sm:p-4">
         <AnimatedBackground />
 
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.6, type: "spring", bounce: 0.3 }}
-          className="relative z-10 w-full max-w-lg max-h-[95vh] overflow-y-auto"
+          className="relative z-10 w-full max-w-lg max-h-[85vh] "
         >
           {/* Glow effect */}
           <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-3xl blur-lg opacity-30" />

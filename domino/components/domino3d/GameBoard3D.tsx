@@ -57,7 +57,7 @@ export function GameBoard3D({
   rightTeam = null,
 }: GameBoard3DProps) {
   return (
-    <div className="board-wrapper relative w-full rounded-xl sm:rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl bg-linear-to-b from-emerald-900/60 to-emerald-950/80 p-0.5 sm:p-1 md:p-2 h-[45vh] sm:h-[50vh] md:h-[65vh] min-h-60 sm:min-h-75 md:min-h-130">
+    <div className="board-wrapper relative w-full rounded-xl sm:rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl bg-linear-to-b from-emerald-900/60 to-emerald-950/80 p-0.5 sm:p-1 md:p-2 h-[50vh] sm:h-[55vh] md:h-[65vh] landscape:h-[70vh] min-h-60 sm:min-h-75 md:min-h-130">
       <div
         className="absolute inset-0 rounded-3xl pointer-events-none"
         style={{ boxShadow: "inset 0 0 120px rgba(0,0,0,.35)" }}

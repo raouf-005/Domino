@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import {
   Billboard,
@@ -8,6 +9,7 @@ import {
   OrbitControls,
   Text,
 } from "@react-three/drei";
+import type { LayoutBounds } from "./useSnakeLayout";
 import type { Domino, Team } from "../../lib/gameTypes";
 import type { Side, Vec3 } from "./types";
 import { useSnakeLayout } from "./useSnakeLayout";
@@ -70,7 +72,7 @@ export function GameScene({
     right: rightTeam,
   } as const;
   const [anyDrag, setAnyDrag] = useState(false);
-  const { items, leftDrop, rightDrop } = useSnakeLayout(board);
+  const { items, leftDrop, rightDrop, bounds } = useSnakeLayout(board);
 
   const onDrag = useCallback((active: boolean) => setAnyDrag(active), []);
 
@@ -120,17 +122,62 @@ export function GameScene({
         scale={60}
         blur={2}
       />
+      <CameraAutoFit bounds={bounds} boardCount={board.length} />
       <OrbitControls
         enabled={!anyDrag}
         maxPolarAngle={Math.PI / 2.2}
         minPolarAngle={Math.PI / 6}
         minDistance={8}
-        maxDistance={35}
-        enablePan={false}
+        maxDistance={55}
+        enablePan={true}
+        panSpeed={0.8}
+        enableZoom={true}
+        zoomSpeed={0.8}
         target={[0, 0, 2]}
       />
     </>
   );
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Auto-fit camera: zoom the camera so the full board always
+ * fits inside the viewport, regardless of phone orientation.
+ * Smoothly adjusts whenever the board grows or shrinks.
+ * ──────────────────────────────────────────────────────────── */
+function CameraAutoFit({
+  bounds,
+  boardCount,
+}: {
+  bounds: LayoutBounds;
+  boardCount: number;
+}) {
+  const { camera, size } = useThree();
+
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const aspect = size.width / size.height;
+
+    const extentX = bounds.maxX - bounds.minX;
+    const extentZ = bounds.maxZ - bounds.minZ + 12; // extra Z for player hand area
+
+    const fovRad = cam.fov * (Math.PI / 180);
+
+    // Distance needed to fit the vertical extent
+    const distZ = extentZ / (2 * Math.tan(fovRad / 2));
+    // Distance needed to fit the horizontal extent (account for aspect ratio)
+    const distX = extentX / (2 * Math.tan(fovRad / 2) * aspect);
+
+    const idealDist = Math.max(distX, distZ) + 2;
+    // Clamp: never closer than 14, never farther than 55
+    const clamped = Math.min(Math.max(idealDist, 14), 55);
+
+    // Keep the same look-angle, just move further back / closer
+    const dir = cam.position.clone().normalize();
+    cam.position.copy(dir.multiplyScalar(clamped));
+    cam.updateProjectionMatrix();
+  }, [bounds, boardCount, camera, size]);
+
+  return null;
 }
 
 function TurnSeatMarker({
