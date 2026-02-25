@@ -20,7 +20,7 @@
  * at the edge of a domino table and looking down.
  */
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Platform,
   ScrollView,
@@ -252,6 +252,41 @@ export default function GameScreen() {
   // ================================================================
   const currentTurn = gameState.players[gameState.currentPlayerIndex];
 
+  // Memoize opponents object so Board3D doesn't re-render on rotation
+  const boardOpponents = useMemo(
+    () => ({
+      top: partner
+        ? { name: partner.name, tileCount: partner.hand.length }
+        : undefined,
+      left: leftOpp
+        ? { name: leftOpp.name, tileCount: leftOpp.hand.length }
+        : undefined,
+      right: rightOpp
+        ? { name: rightOpp.name, tileCount: rightOpp.hand.length }
+        : undefined,
+    }),
+    [
+      partner?.name,
+      partner?.hand.length,
+      leftOpp?.name,
+      leftOpp?.hand.length,
+      rightOpp?.name,
+      rightOpp?.hand.length,
+    ],
+  );
+
+  // Determine which board slot is currently active (turn indicator)
+  const activeSlot = useMemo(() => {
+    if (myIndex < 0 || !gameState) return null;
+    const ci = gameState.currentPlayerIndex;
+    if (ci === myIndex) return "self" as const;
+    const total = gameState.players.length;
+    if (ci === (myIndex + 2) % total) return "top" as const;
+    if (ci === (myIndex + 1) % total) return "left" as const;
+    if (ci === (myIndex + 3) % total) return "right" as const;
+    return null;
+  }, [myIndex, gameState?.currentPlayerIndex, gameState?.players.length]);
+
   // ── Hand tiles ──
   const handContent = (
     <View style={[styles.handSection, isLandscape && styles.handSectionLand]}>
@@ -390,17 +425,8 @@ export default function GameScreen() {
             boardLeftEnd={gameState.boardLeftEnd}
             boardRightEnd={gameState.boardRightEnd}
             dragOverSide={dragOverSide}
-            opponents={{
-              top: partner
-                ? { name: partner.name, tileCount: partner.hand.length }
-                : undefined,
-              left: leftOpp
-                ? { name: leftOpp.name, tileCount: leftOpp.hand.length }
-                : undefined,
-              right: rightOpp
-                ? { name: rightOpp.name, tileCount: rightOpp.hand.length }
-                : undefined,
-            }}
+            opponents={boardOpponents}
+            activeSlot={activeSlot}
           />
         </View>
         {handContent}

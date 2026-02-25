@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { io, Socket } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -421,8 +421,7 @@ export default function GamePage() {
   const [reconnecting, setReconnecting] = useState(false);
 
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
-    const newSocket: GameSocket = io(socketUrl ?? "/", {
+    const newSocket: GameSocket = io("http://localhost:3001", {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 10,
@@ -563,25 +562,33 @@ export default function GamePage() {
       ? gameState.players[(myIndex + 3) % gameState.players.length]
       : undefined;
 
-  const getPlayableSides = (domino: Domino): ("left" | "right")[] => {
-    if (!gameState) return [];
-    const boardEmpty = gameState.board.length === 0;
-    const { canPlay, sides } = canPlayDomino(
-      domino,
-      gameState.boardLeftEnd,
-      gameState.boardRightEnd,
-      boardEmpty,
-    );
-    return canPlay ? sides : [];
-  };
+  const getPlayableSides = useCallback(
+    (domino: Domino): ("left" | "right")[] => {
+      if (!gameState) return [];
+      const boardEmpty = gameState.board.length === 0;
+      const { canPlay, sides } = canPlayDomino(
+        domino,
+        gameState.boardLeftEnd,
+        gameState.boardRightEnd,
+        boardEmpty,
+      );
+      return canPlay ? sides : [];
+    },
+    [gameState],
+  );
 
-  const canPass =
-    currentPlayer?.hand.every((d) => getPlayableSides(d).length === 0) ?? false;
+  const canPass = useMemo(
+    () =>
+      currentPlayer?.hand.every(
+        (domino) => getPlayableSides(domino).length === 0,
+      ) ?? false,
+    [currentPlayer?.hand, getPlayableSides],
+  );
 
   const isBlockedEnd =
     gameState?.gamePhase === "finished" && gameState.passCount >= 4;
 
-  const activeSeat = (() => {
+  const activeSeat = useMemo(() => {
     if (!gameState || myIndex < 0) return null;
     const rel =
       (gameState.currentPlayerIndex - myIndex + gameState.players.length) %
@@ -593,7 +600,9 @@ export default function GamePage() {
       "right",
     ];
     return seats[rel] ?? null;
-  })();
+  }, [gameState, myIndex]);
+
+  const getNoPlayableSides = useCallback((): ("left" | "right")[] => [], []);
 
   const autoFillAI = () => {
     if (!socket || !gameState) return;
@@ -1198,7 +1207,7 @@ export default function GamePage() {
               boardRightEnd={gameState?.boardRightEnd ?? -1}
               hand={currentPlayer?.hand || []}
               isMyTurn={false}
-              getPlayableSides={() => []}
+              getPlayableSides={getNoPlayableSides}
               onPlay={playDomino}
               onPass={pass}
               canPass={false}

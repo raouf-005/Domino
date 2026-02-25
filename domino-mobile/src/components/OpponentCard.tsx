@@ -4,25 +4,25 @@
  * Amber border pulse when it's that player's turn.
  */
 import React, { useEffect } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated, {
-  useSharedValue,
+  Easing,
+  interpolate,
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
   withSequence,
   withTiming,
-  interpolate,
-  Easing,
 } from "react-native-reanimated";
-import { Player } from "../types/gameTypes";
 import { Colors } from "../theme/colors";
+import { Player } from "../types/gameTypes";
 
 interface Props {
   player?: Player;
   isActive: boolean;
 }
 
-export default function OpponentCard({ player, isActive }: Props) {
+function OpponentCardInner({ player, isActive }: Props) {
   const glow = useSharedValue(0);
 
   useEffect(() => {
@@ -63,6 +63,9 @@ export default function OpponentCard({ player, isActive }: Props) {
     </Animated.View>
   );
 }
+
+const OpponentCard = React.memo(OpponentCardInner);
+export default OpponentCard;
 
 const s = StyleSheet.create({
   pill: {

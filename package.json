@@ -1,0 +1,12 @@
+{
+  "name": "domino-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "cd domino && npm run dev",
+    "build": "cd domino && npm run build",
+    "start": "cd domino && npm run start",
+    "dev:server": "cd domino-server && npm run dev",
+    "build:server": "cd domino-server && npm run build",
+    "start:server": "cd domino-server && npm run start"
+  }
+}

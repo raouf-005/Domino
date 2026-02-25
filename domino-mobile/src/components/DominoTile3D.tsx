@@ -1,22 +1,23 @@
-import React, { useEffect } from "react";
-import { View, StyleSheet, Dimensions } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo } from "react";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, {
-  useSharedValue,
+  Easing,
+  interpolate,
   useAnimatedStyle,
-  withSpring,
-  withTiming,
+  useSharedValue,
+  withDelay,
   withRepeat,
   withSequence,
-  interpolate,
-  Easing,
-  withDelay,
+  withSpring,
+  withTiming,
 } from "react-native-reanimated";
-import { LinearGradient } from "expo-linear-gradient";
-import { Domino } from "../types/gameTypes";
 import { Colors } from "../theme/colors";
+import { Domino } from "../types/gameTypes";
 
-const { width: SCREEN_W } = Dimensions.get("window");
-const SCALE = SCREEN_W <= 360 ? 0.85 : SCREEN_W >= 420 ? 1.08 : 1;
+function getScale(screenW: number) {
+  return screenW <= 360 ? 0.85 : screenW >= 420 ? 1.08 : 1;
+}
 
 // ── Pip layouts for domino faces 0-6 ──
 const PIP_POS: Record<number, [number, number][]> = {
@@ -124,7 +125,7 @@ function Face({
 }
 
 // ══════════ MAIN 3D DOMINO TILE ══════════
-export default function DominoTile3D({
+function DominoTile3DInner({
   domino,
   size = "normal",
   playable = false,
@@ -135,6 +136,8 @@ export default function DominoTile3D({
   horizontal = false,
   onPress,
 }: Props) {
+  const { width: screenW } = useWindowDimensions();
+  const SCALE = useMemo(() => getScale(screenW), [screenW]);
   const sc = SCALE * (boardTile ? 1.05 : 1);
   const raw = SIZES[size];
   const W = Math.round(raw.w * sc);
@@ -417,15 +420,19 @@ export default function DominoTile3D({
   );
 }
 
+const DominoTile3D = React.memo(DominoTile3DInner);
+export default DominoTile3D;
+
 // ══════════ FACE-DOWN 3D TILE ══════════
-export function FaceDownTile3D({
+function FaceDownTile3DInner({
   size = "small",
   delay = 0,
 }: {
   size?: "tiny" | "small" | "normal";
   delay?: number;
 }) {
-  const sc = SCALE;
+  const { width: screenW } = useWindowDimensions();
+  const sc = useMemo(() => getScale(screenW), [screenW]);
   const raw = SIZES[size];
   const W = Math.round(raw.w * sc);
   const H = Math.round(raw.h * sc);
@@ -527,3 +534,5 @@ export function FaceDownTile3D({
     </Animated.View>
   );
 }
+
+export const FaceDownTile3D = React.memo(FaceDownTile3DInner);

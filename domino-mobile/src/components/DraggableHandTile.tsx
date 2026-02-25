@@ -8,7 +8,7 @@
  *  • Smooth spring-back on miss
  *  • Glow outline on playable tiles
  */
-import { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -39,7 +39,7 @@ interface Props {
   onDragStateChange: (dragging: boolean, side: "left" | "right" | null) => void;
 }
 
-export default function DraggableHandTile({
+function DraggableHandTileInner({
   domino,
   playable,
   isMyTurn,
@@ -51,6 +51,30 @@ export default function DraggableHandTile({
   onDragStateChange,
 }: Props) {
   const { width: SCREEN_W, height: SCREEN_H } = useWindowDimensions();
+
+  // ── Store dimensions in shared values (for worklets) and refs (for JS callbacks) ──
+  const screenW = useSharedValue(SCREEN_W);
+  const screenH = useSharedValue(SCREEN_H);
+  const screenWRef = useRef(SCREEN_W);
+  const screenHRef = useRef(SCREEN_H);
+
+  useEffect(() => {
+    screenW.value = SCREEN_W;
+    screenH.value = SCREEN_H;
+    screenWRef.current = SCREEN_W;
+    screenHRef.current = SCREEN_H;
+  }, [SCREEN_W, SCREEN_H]);
+
+  // Encode playable sides as a bitmask shared value so worklets can read it
+  // without triggering "modified key current" warnings (bit 0 = left, bit 1 = right)
+  const playableSidesBits = useSharedValue(0);
+  useEffect(() => {
+    let bits = 0;
+    if (playableSides.includes("left")) bits |= 1;
+    if (playableSides.includes("right")) bits |= 2;
+    playableSidesBits.value = bits;
+  }, [playableSides]);
+
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
   const scale = useSharedValue(1);
@@ -59,23 +83,25 @@ export default function DraggableHandTile({
   const dragging = useSharedValue(false);
   const currentSide = useSharedValue<"left" | "right" | null>(null);
 
-  // ── drop logic ──
+  // ── drop logic (uses refs so deps are stable) ──
   const handleDrop = useCallback(
     (absX: number, absY: number) => {
       if (!playable || playableSides.length === 0) return;
-      const inBoard = absY < SCREEN_H * 0.65;
+      const sw = screenWRef.current;
+      const sh = screenHRef.current;
+      const inBoard = absY < sh * 0.65;
       if (!inBoard) return;
       if (playableSides.length === 1) {
         onPlay(domino.id, playableSides[0]);
       } else {
-        const side = absX < SCREEN_W / 2 ? "left" : "right";
+        const side = absX < sw / 2 ? "left" : "right";
         onPlay(
           domino.id,
           playableSides.includes(side) ? side : playableSides[0],
         );
       }
     },
-    [playable, playableSides, SCREEN_H, SCREEN_W, domino.id, onPlay],
+    [playable, playableSides, domino.id, onPlay],
   );
 
   const reportDragWorklet = (active: boolean, absX: number, absY: number) => {
@@ -87,16 +113,19 @@ export default function DraggableHandTile({
       }
       return;
     }
-    const inBoard = absY < SCREEN_H * 0.65;
+    const sw = screenW.value;
+    const sh = screenH.value;
+    const bits = playableSidesBits.value;
+    const hasLeft = (bits & 1) !== 0;
+    const hasRight = (bits & 2) !== 0;
+    const sideCount = (hasLeft ? 1 : 0) + (hasRight ? 1 : 0);
+    const inBoard = absY < sh * 0.65;
     let newSide: "left" | "right" | null = null;
-    if (inBoard && playableSides.length > 0) {
-      if (playableSides.length === 1) {
-        newSide = playableSides[0];
+    if (inBoard && sideCount > 0) {
+      if (sideCount === 1) {
+        newSide = hasLeft ? "left" : "right";
       } else {
-        newSide = absX < SCREEN_W / 2 ? "left" : "right";
-        if (!playableSides.includes(newSide)) {
-          newSide = playableSides[0];
-        }
+        newSide = absX < sw / 2 ? "left" : "right";
       }
     }
     if (newSide !== currentSide.value) {
@@ -105,7 +134,7 @@ export default function DraggableHandTile({
     }
   };
 
-  // ── Pan gesture ──
+  // ── Pan gesture — deps no longer include screen dimensions ──
   const pan = useMemo(
     () =>
       Gesture.Pan()
@@ -121,8 +150,7 @@ export default function DraggableHandTile({
           "worklet";
           tx.value = e.translationX;
           ty.value = e.translationY;
-          // Slight rotation while dragging for 3D feel
-          rotZ.value = (e.translationX / SCREEN_W) * 15;
+          rotZ.value = (e.translationX / screenW.value) * 15;
           reportDragWorklet(true, e.absoluteX, e.absoluteY);
         })
         .onEnd((e) => {
@@ -146,7 +174,7 @@ export default function DraggableHandTile({
           zIdx.value = 1;
           reportDragWorklet(false, 0, 0);
         }),
-    [playable, handleDrop, SCREEN_W, SCREEN_H, playableSides],
+    [playable, handleDrop],
   );
 
   const animStyle = useAnimatedStyle(() => ({
@@ -196,6 +224,9 @@ export default function DraggableHandTile({
     </GestureDetector>
   );
 }
+
+const DraggableHandTile = React.memo(DraggableHandTileInner);
+export default DraggableHandTile;
 
 const styles = StyleSheet.create({
   wrap: {

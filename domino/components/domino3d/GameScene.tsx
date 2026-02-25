@@ -3,12 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import {
-  Billboard,
-  ContactShadows,
-  OrbitControls,
-  Text,
-} from "@react-three/drei";
+import { Html, OrbitControls } from "@react-three/drei";
 import type { LayoutBounds } from "./useSnakeLayout";
 import type { Domino, Team } from "../../lib/gameTypes";
 import type { Side, Vec3 } from "./types";
@@ -18,6 +13,14 @@ import { Table } from "./Table";
 import { BoardDominoes } from "./BoardDominoes";
 import { DominoPiece } from "./DominoPiece";
 import { PlayerHand } from "./PlayerHand";
+
+// Shared geometry + material for opponent tile backs (avoid per-mesh alloc)
+const TILE_BOX = new THREE.BoxGeometry(1, 2, 0.18);
+const TILE_MAT = new THREE.MeshStandardMaterial({
+  color: "#f5f5f0",
+  metalness: 0.1,
+  roughness: 0.35,
+});
 
 export function GameScene({
   board,
@@ -82,7 +85,6 @@ export function GameScene({
   return (
     <>
       <Lighting />
-      <fog attach="fog" args={["#0a2e1a", 35, 70]} />
       <Table />
       {revealAllHands ? (
         <HandTiles3D
@@ -116,12 +118,6 @@ export function GameScene({
           boardRightEnd={boardRightEnd}
         />
       )}
-      <ContactShadows
-        position={[0, -0.14, 0]}
-        opacity={0.4}
-        scale={60}
-        blur={2}
-      />
       <CameraAutoFit bounds={bounds} boardCount={board.length} />
       <OrbitControls
         enabled={!anyDrag}
@@ -129,10 +125,10 @@ export function GameScene({
         minPolarAngle={Math.PI / 6}
         minDistance={8}
         maxDistance={55}
-        enablePan={true}
-        panSpeed={0.8}
+        enablePan={false}
         enableZoom={true}
-        zoomSpeed={0.8}
+        zoomSpeed={0.6}
+        enableDamping={false}
         target={[0, 0, 2]}
       />
     </>
@@ -210,7 +206,7 @@ function TurnSeatMarker({
   return (
     <>
       <mesh position={seatPos[seat]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[2.2, 2.75, 48]} />
+        <ringGeometry args={[2.2, 2.75, 16]} />
         <meshStandardMaterial
           color="#ffe066"
           emissive="#ffd24a"
@@ -219,18 +215,9 @@ function TurnSeatMarker({
           opacity={0.65}
         />
       </mesh>
-      <Billboard position={emojiPos[seat]} follow>
-        <Text
-          fontSize={0.8}
-          color="#fff6cc"
-          outlineWidth={0.05}
-          outlineColor="#6b4b00"
-          anchorX="center"
-          anchorY="middle"
-        >
-          ⭐
-        </Text>
-      </Billboard>
+      <Html position={emojiPos[seat]} center distanceFactor={10}>
+        <div className="text-xl select-none pointer-events-none">⭐</div>
+      </Html>
     </>
   );
 }
@@ -275,7 +262,7 @@ function TeamSeatGlows({
             position={seatPos[seat]}
             rotation={[-Math.PI / 2, 0, 0]}
           >
-            <circleGeometry args={[2.8, 48]} />
+            <circleGeometry args={[2.8, 16]} />
             <meshStandardMaterial
               color={color}
               emissive={color}
@@ -305,7 +292,7 @@ function HandArc({
   span?: number;
   tilt?: number;
 }) {
-  const visible = Math.min(count, 12);
+  const visible = Math.min(count, 8);
   const tiles = Array.from({ length: visible });
   return (
     <>
@@ -318,14 +305,7 @@ function HandArc({
         const yRot = Math.atan2(0 - x, 0 - z);
         const rot = new THREE.Euler(tilt, yRot, 0, "YXZ");
         return (
-          <mesh key={i} position={[x, y, z]} rotation={rot}>
-            <boxGeometry args={[1, 2, 0.18]} />
-            <meshStandardMaterial
-              color="#f5f5f0"
-              metalness={0.1}
-              roughness={0.35}
-            />
-          </mesh>
+          <mesh key={i} position={[x, y, z]} rotation={rot} geometry={TILE_BOX} material={TILE_MAT} />
         );
       })}
     </>
@@ -386,24 +366,14 @@ function HandCountLabel({
   color?: string;
 }) {
   return (
-    <Billboard
-      position={position}
-      follow
-      lockX={false}
-      lockY={false}
-      lockZ={false}
-    >
-      <Text
-        fontSize={0.55}
-        color={color}
-        outlineWidth={0.04}
-        outlineColor="#0a2e1a"
-        anchorX="center"
-        anchorY="middle"
+    <Html position={position} center distanceFactor={12}>
+      <div
+        className="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap select-none pointer-events-none"
+        style={{ color, background: "rgba(0,0,0,0.35)" }}
       >
         {label}
-      </Text>
-    </Billboard>
+      </div>
+    </Html>
   );
 }
 

@@ -47,6 +47,7 @@ export function DragTile({
   const [isDrag, setDrag] = useState(false);
   const [hover, setHover] = useState(false);
   const [near, setNear] = useState<Side | null>(null);
+  const nearRef = useRef<Side | null>(null);
   /** When true, we show L/R picker instead of auto-dropping */
   const [showPicker, setShowPicker] = useState(false);
   const offset = useRef(new THREE.Vector3());
@@ -87,10 +88,11 @@ export function DragTile({
     sides.includes("right") &&
     dropsAreClose;
 
-  // Smooth return when not dragging
-  useFrame(() => {
+  // Smooth return when not dragging (delta-based for frame-rate independence)
+  useFrame((_, delta) => {
     if (!group.current || dragging.current) return;
-    group.current.position.lerp(rest.current, 0.12);
+    const t = 1 - Math.pow(0.001, delta); // ~0.12 at 60fps, adapts to any fps
+    group.current.position.lerp(rest.current, t);
     if (hover && playable && myTurn) group.current.position.y = handY + 0.5;
   });
 
@@ -99,20 +101,31 @@ export function DragTile({
     [],
   );
 
+  // ── Reusable THREE objects (avoid GC pressure in hot path) ──
+  const _mouse = useRef(new THREE.Vector2());
+  const _ray = useRef(new THREE.Raycaster());
+  const _hit = useRef(new THREE.Vector3());
+
   const rayHit = useCallback(
     (cx: number, cy: number) => {
       const rect = gl.domElement.getBoundingClientRect();
-      const m = new THREE.Vector2(
+      _mouse.current.set(
         ((cx - rect.left) / rect.width) * 2 - 1,
         -((cy - rect.top) / rect.height) * 2 + 1,
       );
-      const rc = new THREE.Raycaster();
-      rc.setFromCamera(m, camera);
-      const t = new THREE.Vector3();
-      return rc.ray.intersectPlane(plane, t) ? t : null;
+      _ray.current.setFromCamera(_mouse.current, camera);
+      return _ray.current.ray.intersectPlane(plane, _hit.current)
+        ? _hit.current.clone()
+        : null;
     },
     [gl.domElement, camera, plane],
   );
+
+  const setNearIfChanged = useCallback((next: Side | null) => {
+    if (nearRef.current === next) return;
+    nearRef.current = next;
+    setNear(next);
+  }, []);
 
   const down = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
@@ -145,17 +158,17 @@ export function DragTile({
       if (needsPicker) {
         // When zones overlap, highlight the CLOSER one but don't commit
         if (dL < th || dR < th) {
-          setNear(dL <= dR ? "left" : "right");
+          setNearIfChanged(dL <= dR ? "left" : "right");
         } else {
-          setNear(null);
+          setNearIfChanged(null);
         }
       } else {
-        if (dL < th && sides.includes("left")) setNear("left");
-        else if (dR < th && sides.includes("right")) setNear("right");
-        else setNear(null);
+        if (dL < th && sides.includes("left")) setNearIfChanged("left");
+        else if (dR < th && sides.includes("right")) setNearIfChanged("right");
+        else setNearIfChanged(null);
       }
     },
-    [rayHit, leftDrop, rightDrop, sides, needsPicker],
+    [rayHit, leftDrop, rightDrop, sides, needsPicker, setNearIfChanged],
   );
 
   const up = useCallback(() => {
@@ -176,8 +189,17 @@ export function DragTile({
         onPlay(domino.id, near);
       }
     }
-    setNear(null);
-  }, [near, onPlay, domino.id, gl.domElement, onDrag, needsPicker, boardEmpty]);
+    setNearIfChanged(null);
+  }, [
+    near,
+    onPlay,
+    domino.id,
+    gl.domElement,
+    onDrag,
+    needsPicker,
+    boardEmpty,
+    setNearIfChanged,
+  ]);
 
   const pickSide = useCallback(
     (side: Side) => {

@@ -57,10 +57,9 @@ function GameBoard3DComponent({
   rightTeam = null,
 }: GameBoard3DProps) {
   const handleCreated = useCallback(({ gl }: { gl: THREE.WebGLRenderer }) => {
-    gl.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // prevent overkill on 4K
+    gl.setPixelRatio(1);
     gl.outputColorSpace = THREE.SRGBColorSpace;
-    gl.toneMapping = THREE.ACESFilmicToneMapping;
-    gl.toneMappingExposure = 1.25;
+    gl.toneMapping = THREE.NoToneMapping;
   }, []);
 
   return (
@@ -72,11 +71,11 @@ function GameBoard3DComponent({
       />
 
       <Canvas
-        shadows
-        frameloop="demand" // better performance unless you animate continuously
+        shadows={false}
+        dpr={[1, 1]}
         camera={{ position: [0, 12, 14], fov: 45 }}
         gl={{
-          antialias: true,
+          antialias: false,
           alpha: false,
           powerPreference: "high-performance",
         }}
@@ -87,17 +86,6 @@ function GameBoard3DComponent({
         onCreated={handleCreated}
       >
         <Suspense fallback={null}>
-          {/* Lighting */}
-          <ambientLight intensity={0.4} />
-          <directionalLight
-            position={[10, 20, 10]}
-            intensity={1}
-            castShadow
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
-          />
-          <hemisphereLight args={["#ffffff", "#0f2f1d", 0.4]} />
-
           <GameScene
             board={board}
             hand={hand}
