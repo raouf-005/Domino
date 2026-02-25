@@ -421,7 +421,8 @@ export default function GamePage() {
   const [reconnecting, setReconnecting] = useState(false);
 
   useEffect(() => {
-    const newSocket: GameSocket = io({
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
+    const newSocket: GameSocket = io(socketUrl ?? "/", {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 10,

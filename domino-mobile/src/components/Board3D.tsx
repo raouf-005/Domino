@@ -1,24 +1,24 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { PanResponder, StyleSheet, Text, View } from "react-native";
 import { GLView } from "expo-gl";
 import { Renderer } from "expo-three";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PanResponder, StyleSheet, Text, View } from "react-native";
 import * as THREE from "three";
 import { Domino } from "../types/gameTypes";
+
+interface Opponent {
+  name: string;
+  tileCount: number;
+}
 
 interface Props {
   board: Domino[];
   boardLeftEnd: number;
   boardRightEnd: number;
   dragOverSide: "left" | "right" | null;
+  opponents?: { top?: Opponent; left?: Opponent; right?: Opponent };
 }
 
-const TABLE_W = 42;
+const TABLE_W = 40;
 const TABLE_H = 26;
 const EDGE_H = 0.9;
 const EDGE_T = 0.8;
@@ -106,7 +106,7 @@ function buildSnakeLayout(board: Domino[]): LayoutItem[] {
 
   // ── Phase 1: Place tiles in a snake path ──
   // Row goes in direction `dir` along X axis, each turn shifts down Z
-  const halfBoard = (TABLE_W * 0.6) / 2; // usable half-width for 60% occupation
+  const halfBoard = (TABLE_W * 0.7) / 2; // usable half-width for 60% occupation
   const items: LayoutItem[] = [];
   let dir = 1; // 1 = east, -1 = west
   let x = 0;
@@ -300,11 +300,76 @@ function makeDominoMesh(domino: Domino) {
   return group;
 }
 
+function makeBlankDominoMesh() {
+  const group = new THREE.Group();
+
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_W * 1.03, TILE_H * 0.95, TILE_L * 1.03),
+    new THREE.MeshStandardMaterial({
+      color: "#e8e8e8",
+      roughness: 0.4,
+      metalness: 0.05,
+    }),
+  );
+  base.position.y = -TILE_H * 0.03;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  group.add(base);
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_W, TILE_H, TILE_L),
+    new THREE.MeshStandardMaterial({
+      color: "#ffffff",
+      roughness: 0.25,
+      metalness: 0.08,
+    }),
+  );
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+
+  const edge = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_W, TILE_H, TILE_L)),
+    new THREE.LineBasicMaterial({ color: "#d0d0d0" }),
+  );
+  group.add(edge);
+
+  return group;
+}
+
+/** Place N blank tiles side by side, centered around (cx, cz) */
+function placeOpponentTiles(
+  parent: any,
+  count: number,
+  cx: number,
+  cz: number,
+  rotY: number,
+) {
+  const spacing = TILE_W + 0.15;
+  const totalW = count * spacing - 0.15;
+  const startX = -totalW / 2 + TILE_W / 2;
+
+  for (let i = 0; i < count; i++) {
+    const tile = makeBlankDominoMesh();
+    // Rotate tile to face down (back side up)
+    tile.rotation.x = Math.PI; // flip upside down
+    tile.rotation.y = rotY;
+    // Position relative to center
+    const localX = startX + i * spacing;
+    // Apply rotation to get world position
+    const cos = Math.cos(rotY);
+    const sin = Math.sin(rotY);
+    tile.position.set(cx + localX * cos, TILE_H / 2 + 0.04, cz + localX * sin);
+    parent.add(tile);
+  }
+}
+
 export default function Board3D({
   board,
   boardLeftEnd,
   boardRightEnd,
   dragOverSide,
+  opponents,
 }: Props) {
   const rendererRef = useRef<any>(null);
   const sceneRef = useRef<any>(null);
@@ -313,35 +378,59 @@ export default function Board3D({
   const frameRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
 
-  const cameraOrbitRef = useRef({ azimuth: 0.8, polar: 1.0, distance: 32 });
+  const cameraOrbitRef = useRef({
+    azimuth: 0.8,
+    polar: 1.0,
+    distance: 32,
+    targetX: 0,
+    targetY: 0,
+    targetZ: 0,
+  });
   const lastPanRef = useRef({ dx: 0, dy: 0 });
-  const [cameraHelp, setCameraHelp] = useState("Drag board to rotate camera");
+  const touchesRef = useRef<{
+    count: number;
+    pinchDist: number;
+    midX: number;
+    midY: number;
+  }>({
+    count: 0,
+    pinchDist: 0,
+    midX: 0,
+    midY: 0,
+  });
+  const [cameraHelp, setCameraHelp] = useState(
+    "1 finger: rotate · 2 fingers: pan & zoom",
+  );
 
   const layout = useMemo(() => buildSnakeLayout(board), [board]);
 
   const updateCamera = useCallback(() => {
     const camera = cameraRef.current;
     if (!camera) return;
-    const { azimuth, polar, distance } = cameraOrbitRef.current;
-    const x = Math.sin(polar) * Math.cos(azimuth) * distance;
-    const z = Math.sin(polar) * Math.sin(azimuth) * distance;
-    const y = Math.cos(polar) * distance + 12;
+    const { azimuth, polar, distance, targetX, targetY, targetZ } =
+      cameraOrbitRef.current;
+    const x = targetX + Math.sin(polar) * Math.cos(azimuth) * distance;
+    const z = targetZ + Math.sin(polar) * Math.sin(azimuth) * distance;
+    const y = targetY + Math.cos(polar) * distance;
     camera.position.set(x, y, z);
     camera.far = Math.max(260, distance * 14);
     camera.updateProjectionMatrix();
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(targetX, targetY, targetZ);
   }, []);
 
   const zoomIn = useCallback(() => {
     cameraOrbitRef.current.distance = Math.max(
-      1.2,
+      0.5,
       cameraOrbitRef.current.distance * 0.84,
     );
     updateCamera();
   }, [updateCamera]);
 
   const zoomOut = useCallback(() => {
-    cameraOrbitRef.current.distance *= 1.19;
+    cameraOrbitRef.current.distance = Math.min(
+      200,
+      cameraOrbitRef.current.distance * 1.19,
+    );
     updateCamera();
   }, [updateCamera]);
 
@@ -359,7 +448,37 @@ export default function Board3D({
       mesh.rotation.y = item.rotY;
       group.add(mesh);
     }
-  }, [layout]);
+
+    // ── Place opponent blank tiles in 3 corners ──
+    const cornerInset = 3.5;
+    const edgeX = TABLE_W / 2 - cornerInset;
+    const edgeZ = TABLE_H / 2 - cornerInset;
+
+    // Top center (partner)
+    if (opponents?.top && opponents.top.tileCount > 0) {
+      placeOpponentTiles(group, opponents.top.tileCount, 0, -edgeZ, 0);
+    }
+    // Left side
+    if (opponents?.left && opponents.left.tileCount > 0) {
+      placeOpponentTiles(
+        group,
+        opponents.left.tileCount,
+        -edgeX,
+        0,
+        Math.PI / 2,
+      );
+    }
+    // Right side
+    if (opponents?.right && opponents.right.tileCount > 0) {
+      placeOpponentTiles(
+        group,
+        opponents.right.tileCount,
+        edgeX,
+        0,
+        -Math.PI / 2,
+      );
+    }
+  }, [layout, opponents]);
 
   useEffect(() => {
     applyBoardLayout();
@@ -382,15 +501,69 @@ export default function Board3D({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onStartShouldSetPanResponderCapture: () => false,
         onMoveShouldSetPanResponderCapture: () => true,
-        onPanResponderGrant: () => {
+        onPanResponderGrant: (evt) => {
           lastPanRef.current = { dx: 0, dy: 0 };
+          const touches = evt.nativeEvent.touches;
+          if (touches && touches.length >= 2) {
+            const dx = touches[1].pageX - touches[0].pageX;
+            const dy = touches[1].pageY - touches[0].pageY;
+            touchesRef.current = {
+              count: 2,
+              pinchDist: Math.sqrt(dx * dx + dy * dy),
+              midX: (touches[0].pageX + touches[1].pageX) / 2,
+              midY: (touches[0].pageY + touches[1].pageY) / 2,
+            };
+          } else {
+            touchesRef.current = { count: 1, pinchDist: 0, midX: 0, midY: 0 };
+          }
           setCameraHelp("");
         },
-        onPanResponderMove: (_evt, gestureState) => {
+        onPanResponderMove: (evt, gestureState) => {
+          const touches = evt.nativeEvent.touches;
+          if (touches && touches.length >= 2) {
+            // ── Pinch to zoom ──
+            const dx = touches[1].pageX - touches[0].pageX;
+            const dy = touches[1].pageY - touches[0].pageY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const midX = (touches[0].pageX + touches[1].pageX) / 2;
+            const midY = (touches[0].pageY + touches[1].pageY) / 2;
+
+            if (
+              touchesRef.current.count === 2 &&
+              touchesRef.current.pinchDist > 0
+            ) {
+              const scale = touchesRef.current.pinchDist / dist;
+              cameraOrbitRef.current.distance = Math.max(
+                0.5,
+                Math.min(200, cameraOrbitRef.current.distance * scale),
+              );
+
+              // ── Two-finger pan ──
+              const panDx = midX - touchesRef.current.midX;
+              const panDy = midY - touchesRef.current.midY;
+              const panSpeed = cameraOrbitRef.current.distance * 0.002;
+              const { azimuth } = cameraOrbitRef.current;
+              cameraOrbitRef.current.targetX +=
+                (-panDx * Math.cos(azimuth) - panDy * Math.sin(azimuth)) *
+                panSpeed *
+                0.3;
+              cameraOrbitRef.current.targetZ +=
+                (panDx * Math.sin(azimuth) - panDy * Math.cos(azimuth)) *
+                panSpeed *
+                0.3;
+            }
+
+            touchesRef.current = { count: 2, pinchDist: dist, midX, midY };
+            updateCamera();
+            return;
+          }
+
+          // ── Single finger: orbit ──
+          touchesRef.current.count = 1;
           const deltaX = gestureState.dx - lastPanRef.current.dx;
           const deltaY = gestureState.dy - lastPanRef.current.dy;
           lastPanRef.current = { dx: gestureState.dx, dy: gestureState.dy };
@@ -398,15 +571,22 @@ export default function Board3D({
           cameraOrbitRef.current.azimuth -= deltaX * 0.01;
           cameraOrbitRef.current.polar += deltaY * 0.008;
           cameraOrbitRef.current.polar = Math.min(
-            1.45,
-            Math.max(0.58, cameraOrbitRef.current.polar),
+            Math.PI - 0.05,
+            Math.max(0.05, cameraOrbitRef.current.polar),
           );
           updateCamera();
         },
-        onPanResponderRelease: () =>
-          setTimeout(() => setCameraHelp("Drag board to rotate camera"), 350),
-        onPanResponderTerminate: () =>
-          setCameraHelp("Drag board to rotate camera"),
+        onPanResponderRelease: () => {
+          touchesRef.current = { count: 0, pinchDist: 0, midX: 0, midY: 0 };
+          setTimeout(
+            () => setCameraHelp("1 finger: rotate · 2 fingers: pan & zoom"),
+            350,
+          );
+        },
+        onPanResponderTerminate: () => {
+          touchesRef.current = { count: 0, pinchDist: 0, midX: 0, midY: 0 };
+          setCameraHelp("1 finger: rotate · 2 fingers: pan & zoom");
+        },
       }),
     [updateCamera],
   );
@@ -492,11 +672,24 @@ export default function Board3D({
     [applyBoardLayout, updateCamera],
   );
 
+  const handleLayout = useCallback((e: any) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (rendererRef.current && cameraRef.current) {
+      rendererRef.current.setSize(width, height);
+      cameraRef.current.aspect = width / height;
+      cameraRef.current.updateProjectionMatrix();
+    }
+  }, []);
+
   const leftActive = dragOverSide === "left";
   const rightActive = dragOverSide === "right";
 
   return (
-    <View style={styles.root} {...panResponder.panHandlers}>
+    <View
+      style={styles.root}
+      {...panResponder.panHandlers}
+      onLayout={handleLayout}
+    >
       <GLView style={styles.gl} onContextCreate={onContextCreate} />
 
       <View style={styles.overlayTop} pointerEvents="none">
@@ -519,15 +712,6 @@ export default function Board3D({
 
       <View style={styles.overlayBottom} pointerEvents="none">
         <Text style={styles.helpText}>{cameraHelp}</Text>
-      </View>
-
-      <View style={styles.overlayZoom}>
-        <Text style={styles.zoomBtn} onPress={zoomIn}>
-          ＋
-        </Text>
-        <Text style={styles.zoomBtn} onPress={zoomOut}>
-          －
-        </Text>
       </View>
     </View>
   );
@@ -564,27 +748,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  overlayZoom: {
-    position: "absolute",
-    right: 8,
-    bottom: 36,
-    gap: 8,
-    alignItems: "center",
-  },
-  zoomBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    textAlign: "center",
-    textAlignVertical: "center",
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#fff",
-    backgroundColor: "rgba(0,0,0,0.42)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    overflow: "hidden",
   },
   helpText: {
     color: "rgba(255,255,255,0.65)",

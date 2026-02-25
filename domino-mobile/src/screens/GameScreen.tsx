@@ -19,32 +19,37 @@
  * The board is perspective-tilted so it looks like you're standing
  * at the edge of a domino table and looking down.
  */
-import React, { useState, useCallback } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { useCallback, useState } from "react";
 import {
-  View,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  ScrollView,
-  StyleSheet,
   useWindowDimensions,
-  LayoutChangeEvent,
-  Platform,
-  StatusBar,
+  View,
 } from "react-native";
 import Animated, {
   FadeInDown,
   FadeInUp,
-  FadeIn,
   ZoomIn,
 } from "react-native-reanimated";
-import { LinearGradient } from "expo-linear-gradient";
+import Board3D from "../components/Board3D";
+import DominoTile3D from "../components/DominoTile3D";
+import DraggableHandTile from "../components/DraggableHandTile";
+import OpponentCard from "../components/OpponentCard";
 import { useGame } from "../context/GameContext";
 import { Colors } from "../theme/colors";
 import { Domino } from "../types/gameTypes";
-import DominoTile3D from "../components/DominoTile3D";
-import Board3D from "../components/Board3D";
-import DraggableHandTile from "../components/DraggableHandTile";
-import OpponentCard from "../components/OpponentCard";
+
+let ScreenOrientation: typeof import("expo-screen-orientation") | null = null;
+try {
+  ScreenOrientation = require("expo-screen-orientation");
+} catch {
+  ScreenOrientation = null;
+}
 
 const STATUS_BAR_H =
   Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) : 44;
@@ -74,14 +79,9 @@ export default function GameScreen() {
   const hudTop = isLandscape ? 4 : STATUS_BAR_H;
   const handPad = isLandscape ? 8 : H < 700 ? 14 : 22;
 
-  const [boardLayoutY, setBoardLayoutY] = useState(H * 0.35);
   const [dragOverSide, setDragOverSide] = useState<"left" | "right" | null>(
     null,
   );
-
-  const handleBoardLayout = useCallback((e: LayoutChangeEvent) => {
-    setBoardLayoutY(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
-  }, []);
 
   const handleDragStateChange = useCallback(
     (dragging: boolean, side: "left" | "right" | null) => {
@@ -283,56 +283,29 @@ export default function GameScreen() {
         </View>
 
         {/* Draggable tiles */}
-        {isLandscape ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.handTilesLandscapeScroll}
-          >
-            {currentPlayer?.hand.map((domino, index) => {
-              const sides = getPlayableSides(domino);
-              const playable = isMyTurn && sides.length > 0;
+        <View
+          style={[styles.handTiles, isLandscape && styles.handTilesLandscape]}
+        >
+          {currentPlayer?.hand.map((domino, index) => {
+            const sides = getPlayableSides(domino);
+            const playable = isMyTurn && sides.length > 0;
 
-              return (
-                <DraggableHandTile
-                  key={domino.id}
-                  domino={domino}
-                  playable={playable}
-                  isMyTurn={isMyTurn}
-                  index={index}
-                  tileSize="tiny"
-                  compact
-                  playableSides={sides}
-                  boardLayoutY={boardLayoutY}
-                  onPlay={handlePlay}
-                  onDragStateChange={handleDragStateChange}
-                />
-              );
-            })}
-          </ScrollView>
-        ) : (
-          <View style={styles.handTiles}>
-            {currentPlayer?.hand.map((domino, index) => {
-              const sides = getPlayableSides(domino);
-              const playable = isMyTurn && sides.length > 0;
-
-              return (
-                <DraggableHandTile
-                  key={domino.id}
-                  domino={domino}
-                  playable={playable}
-                  isMyTurn={isMyTurn}
-                  index={index}
-                  tileSize="hand"
-                  playableSides={sides}
-                  boardLayoutY={boardLayoutY}
-                  onPlay={handlePlay}
-                  onDragStateChange={handleDragStateChange}
-                />
-              );
-            })}
-          </View>
-        )}
+            return (
+              <DraggableHandTile
+                key={domino.id}
+                domino={domino}
+                playable={playable}
+                isMyTurn={isMyTurn}
+                index={index}
+                tileSize={isLandscape ? "tiny" : "hand"}
+                compact={isLandscape}
+                playableSides={sides}
+                onPlay={handlePlay}
+                onDragStateChange={handleDragStateChange}
+              />
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -411,16 +384,47 @@ export default function GameScreen() {
 
       {/* ── Main content: 3D board + hand tray ── */}
       <>
-        <View style={styles.boardFlex} onLayout={handleBoardLayout}>
+        <View style={styles.boardFlex}>
           <Board3D
             board={gameState.board}
             boardLeftEnd={gameState.boardLeftEnd}
             boardRightEnd={gameState.boardRightEnd}
             dragOverSide={dragOverSide}
+            opponents={{
+              top: partner
+                ? { name: partner.name, tileCount: partner.hand.length }
+                : undefined,
+              left: leftOpp
+                ? { name: leftOpp.name, tileCount: leftOpp.hand.length }
+                : undefined,
+              right: rightOpp
+                ? { name: rightOpp.name, tileCount: rightOpp.hand.length }
+                : undefined,
+            }}
           />
         </View>
         {handContent}
       </>
+
+      {/* ── Rotate screen button ── */}
+      <TouchableOpacity
+        style={styles.rotateBtn}
+        activeOpacity={0.7}
+        onPress={async () => {
+          if (!ScreenOrientation) return;
+          if (isLandscape) {
+            await ScreenOrientation.lockAsync(
+              ScreenOrientation.OrientationLock.PORTRAIT_UP,
+            );
+          } else {
+            await ScreenOrientation.lockAsync(
+              ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
+            );
+          }
+        }}
+      >
+        <Text style={styles.rotateBtnText}>{isLandscape ? "📱" : "📲"}</Text>
+      </TouchableOpacity>
     </LinearGradient>
   );
 }
@@ -430,6 +434,25 @@ export default function GameScreen() {
 // ================================================================
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  // ── Rotate screen button ──
+  rotateBtn: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    zIndex: 999,
+  },
+  rotateBtnText: {
+    fontSize: 20,
+  },
 
   // ── Top bar ──
   topBar: {
@@ -589,11 +612,9 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     overflow: "visible",
   },
-  handTilesLandscapeScroll: {
-    flexDirection: "row",
+  handTilesLandscape: {
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 2,
     paddingVertical: 0,
     paddingBottom: 0,
   },

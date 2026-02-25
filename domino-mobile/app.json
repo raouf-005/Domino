@@ -4,11 +4,11 @@
     "slug": "domino-mobile",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "domino",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0a192f"
     },
@@ -18,7 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundColor": "#0a192f"
       },
       "package": "com.domino.mobile"
@@ -26,7 +26,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": ["expo-router", "expo-font"]
   }

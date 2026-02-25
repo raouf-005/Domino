@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Dimensions,
+  ScrollView,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -247,7 +248,10 @@ export default function LobbyScreen() {
     >
       <AnimatedBackground />
 
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Spinning 3D Logo */}
         <Animated.View entering={ZoomIn.duration(500)}>
           <FloatingLogo />
@@ -362,7 +366,7 @@ export default function LobbyScreen() {
             </Text>
           </TouchableOpacity>
         </Animated.View>
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -370,10 +374,12 @@ export default function LobbyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
   },
   content: {
+    flexGrow: 1,
+    justifyContent: "center",
     paddingHorizontal: 24,
+    paddingVertical: 32,
     alignItems: "center",
   },
   loadingText: {

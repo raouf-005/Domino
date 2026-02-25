@@ -8,7 +8,7 @@ export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 // When running on a real device, use your machine's LAN IP  (e.g. 192.168.x.x)
 // When running on an Android emulator, use 10.0.2.2 for localhost
 // When running on an iOS simulator, use localhost
-const SERVER_URL = "http://localhost:3000"; // <-- UPDATE THIS
+const SERVER_URL = "http://10.61.11.163:3000"; // <-- UPDATE THIS
 
 let socket: GameSocket | null = null;
 

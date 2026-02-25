@@ -8,20 +8,21 @@
  *  • Smooth spring-back on miss
  *  • Glow outline on playable tiles
  */
-import React, { useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, useWindowDimensions } from "react-native";
+import { useCallback, useMemo } from "react";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
   runOnJS,
   SlideInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from "react-native-reanimated";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Colors } from "../theme/colors";
 import { Domino } from "../types/gameTypes";
-import DominoTile3D from "./DominoTile3D";
 import type { TileSize } from "./DominoTile3D";
+import DominoTile3D from "./DominoTile3D";
 
 const SPRING = { damping: 16, stiffness: 160, mass: 0.8 };
 const DRAG_SPRING = { damping: 14, stiffness: 140, mass: 0.6 };
@@ -34,7 +35,6 @@ interface Props {
   tileSize?: TileSize;
   compact?: boolean;
   playableSides: ("left" | "right")[];
-  boardLayoutY: number;
   onPlay: (dominoId: string, side: "left" | "right") => void;
   onDragStateChange: (dragging: boolean, side: "left" | "right" | null) => void;
 }
@@ -47,23 +47,23 @@ export default function DraggableHandTile({
   tileSize = "hand",
   compact = false,
   playableSides,
-  boardLayoutY,
   onPlay,
   onDragStateChange,
 }: Props) {
-  const { width: SCREEN_W } = useWindowDimensions();
+  const { width: SCREEN_W, height: SCREEN_H } = useWindowDimensions();
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
   const scale = useSharedValue(1);
   const rotZ = useSharedValue(0);
   const zIdx = useSharedValue(1);
   const dragging = useSharedValue(false);
+  const currentSide = useSharedValue<"left" | "right" | null>(null);
 
   // ── drop logic ──
   const handleDrop = useCallback(
     (absX: number, absY: number) => {
       if (!playable || playableSides.length === 0) return;
-      const inBoard = absY < boardLayoutY + 80;
+      const inBoard = absY < SCREEN_H * 0.65;
       if (!inBoard) return;
       if (playableSides.length === 1) {
         onPlay(domino.id, playableSides[0]);
@@ -75,29 +75,35 @@ export default function DraggableHandTile({
         );
       }
     },
-    [playable, playableSides, boardLayoutY, domino.id, onPlay],
+    [playable, playableSides, SCREEN_H, SCREEN_W, domino.id, onPlay],
   );
 
-  const reportDrag = useCallback(
-    (active: boolean, absX: number, absY: number) => {
-      if (!active) {
-        onDragStateChange(false, null);
-        return;
+  const reportDragWorklet = (active: boolean, absX: number, absY: number) => {
+    "worklet";
+    if (!active) {
+      if (currentSide.value !== null) {
+        currentSide.value = null;
+        runOnJS(onDragStateChange)(false, null);
       }
-      const inBoard = absY < boardLayoutY + 80;
-      if (inBoard && playableSides.length > 0) {
-        if (playableSides.length === 1) {
-          onDragStateChange(true, playableSides[0]);
-        } else {
-          const side = absX < SCREEN_W / 2 ? "left" : "right";
-          onDragStateChange(true, playableSides.includes(side) ? side : null);
-        }
+      return;
+    }
+    const inBoard = absY < SCREEN_H * 0.65;
+    let newSide: "left" | "right" | null = null;
+    if (inBoard && playableSides.length > 0) {
+      if (playableSides.length === 1) {
+        newSide = playableSides[0];
       } else {
-        onDragStateChange(true, null);
+        newSide = absX < SCREEN_W / 2 ? "left" : "right";
+        if (!playableSides.includes(newSide)) {
+          newSide = playableSides[0];
+        }
       }
-    },
-    [boardLayoutY, playableSides, onDragStateChange],
-  );
+    }
+    if (newSide !== currentSide.value) {
+      currentSide.value = newSide;
+      runOnJS(onDragStateChange)(true, newSide);
+    }
+  };
 
   // ── Pan gesture ──
   const pan = useMemo(
@@ -109,14 +115,15 @@ export default function DraggableHandTile({
           dragging.value = true;
           scale.value = withSpring(1.18, DRAG_SPRING);
           zIdx.value = 100;
+          runOnJS(onDragStateChange)(true, null);
         })
         .onUpdate((e) => {
           "worklet";
           tx.value = e.translationX;
           ty.value = e.translationY;
           // Slight rotation while dragging for 3D feel
-          rotZ.value = e.translationX * 0.03;
-          runOnJS(reportDrag)(true, e.absoluteX, e.absoluteY);
+          rotZ.value = (e.translationX / SCREEN_W) * 15;
+          reportDragWorklet(true, e.absoluteX, e.absoluteY);
         })
         .onEnd((e) => {
           "worklet";
@@ -127,7 +134,7 @@ export default function DraggableHandTile({
           rotZ.value = withSpring(0, SPRING);
           dragging.value = false;
           zIdx.value = 1;
-          runOnJS(reportDrag)(false, 0, 0);
+          reportDragWorklet(false, 0, 0);
         })
         .onFinalize(() => {
           "worklet";
@@ -137,9 +144,9 @@ export default function DraggableHandTile({
           rotZ.value = withSpring(0, SPRING);
           dragging.value = false;
           zIdx.value = 1;
-          runOnJS(reportDrag)(false, 0, 0);
+          reportDragWorklet(false, 0, 0);
         }),
-    [playable, handleDrop, reportDrag],
+    [playable, handleDrop, SCREEN_W, SCREEN_H, playableSides],
   );
 
   const animStyle = useAnimatedStyle(() => ({
@@ -154,8 +161,8 @@ export default function DraggableHandTile({
 
   // Shadow that grows while dragging
   const shadowStyle = useAnimatedStyle(() => ({
-    opacity: dragging.value ? 0.4 : 0,
-    transform: [{ scale: dragging.value ? 1.2 : 0.9 }],
+    opacity: withTiming(dragging.value ? 0.4 : 0, { duration: 150 }),
+    transform: [{ scale: withSpring(dragging.value ? 1.2 : 0.9, SPRING) }],
   }));
 
   return (
