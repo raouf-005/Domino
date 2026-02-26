@@ -33,6 +33,8 @@ const GameBoard3DNoSSR = dynamic(
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL?.trim();
+
 // --------------- Device Fingerprint (persistent device ID) ---------------
 function getDeviceId(): string {
   if (typeof window === "undefined") return "";
@@ -421,7 +423,7 @@ export default function GamePage() {
   const [reconnecting, setReconnecting] = useState(false);
 
   useEffect(() => {
-    const newSocket: GameSocket = io("http://localhost:3001", {
+    const newSocket: GameSocket = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 10,
