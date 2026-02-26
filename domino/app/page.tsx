@@ -32,6 +32,7 @@ const GameBoard3DNoSSR = dynamic(
 );
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+type RenderQuality = "low" | "medium" | "high";
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL?.trim();
 
@@ -421,6 +422,9 @@ export default function GamePage() {
   const [connectionKey, setConnectionKey] = useState(0);
   const deviceId = useRef(typeof window !== "undefined" ? getDeviceId() : "");
   const [reconnecting, setReconnecting] = useState(false);
+  const [renderQuality, setRenderQuality] = useState<RenderQuality>("medium");
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isBoardFullscreen, setIsBoardFullscreen] = useState(false);
 
   useEffect(() => {
     const newSocket: GameSocket = io(SOCKET_URL, {
@@ -466,6 +470,32 @@ export default function GamePage() {
       newSocket.disconnect();
     };
   }, [connectionKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mediaQuery = window.matchMedia("(max-width: 639px)");
+    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
+
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsBoardFullscreen(false);
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -589,6 +619,35 @@ export default function GamePage() {
 
   const isBlockedEnd =
     gameState?.gamePhase === "finished" && gameState.passCount >= 4;
+
+  const enterBoardFullscreen = useCallback(async () => {
+    setIsBoardFullscreen(true);
+    if (typeof document === "undefined") return;
+
+    if (
+      !document.fullscreenElement &&
+      document.documentElement.requestFullscreen
+    ) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        // Ignore browser-specific fullscreen failures and keep in-app fullscreen mode.
+      }
+    }
+  }, []);
+
+  const exitBoardFullscreen = useCallback(async () => {
+    setIsBoardFullscreen(false);
+    if (typeof document === "undefined") return;
+
+    if (document.fullscreenElement && document.exitFullscreen) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // Ignore browser-specific fullscreen failures.
+      }
+    }
+  }, []);
 
   const activeSeat = useMemo(() => {
     if (!gameState || myIndex < 0) return null;
@@ -869,6 +928,102 @@ export default function GamePage() {
   }
 
   // Main game screen
+  const isActiveGamePhase =
+    gameState?.gamePhase !== "waiting" && gameState?.gamePhase !== "finished";
+
+  if (isMobileViewport && isActiveGamePhase && gameState) {
+    return (
+      <div className="fixed inset-0 w-screen h-dvh bg-black">
+        <GameBoard3DNoSSR
+          board={gameState.board}
+          boardLeftEnd={gameState.boardLeftEnd}
+          boardRightEnd={gameState.boardRightEnd}
+          hand={currentPlayer?.hand || []}
+          isMyTurn={!!isMyTurn}
+          getPlayableSides={getPlayableSides}
+          onPlay={playDomino}
+          onPass={pass}
+          canPass={canPass}
+          topHandCount={topPlayer?.hand.length ?? 0}
+          leftHandCount={leftPlayer?.hand.length ?? 0}
+          rightHandCount={rightPlayer?.hand.length ?? 0}
+          activeSeat={activeSeat}
+          bottomTeam={currentPlayer?.team ?? null}
+          leftTeam={leftPlayer?.team ?? null}
+          topTeam={topPlayer?.team ?? null}
+          rightTeam={rightPlayer?.team ?? null}
+          quality={renderQuality}
+          fullscreen
+        />
+
+        <div className="absolute top-3 right-3 z-40">
+          <label className="sr-only" htmlFor="quality-mobile">
+            3D quality
+          </label>
+          <select
+            id="quality-mobile"
+            value={renderQuality}
+            onChange={(e) => setRenderQuality(e.target.value as RenderQuality)}
+            className="bg-black/55 border border-white/20 text-white [&_option]:bg-black/55 [&_option]:text-white   text-xs rounded-lg px-2 py-1 outline-none"
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+    );
+  }
+
+  if (isBoardFullscreen && isActiveGamePhase && gameState) {
+    return (
+      <div className="fixed inset-0 z-70 w-screen h-dvh bg-black">
+        <GameBoard3DNoSSR
+          board={gameState.board}
+          boardLeftEnd={gameState.boardLeftEnd}
+          boardRightEnd={gameState.boardRightEnd}
+          hand={currentPlayer?.hand || []}
+          isMyTurn={!!isMyTurn}
+          getPlayableSides={getPlayableSides}
+          onPlay={playDomino}
+          onPass={pass}
+          canPass={canPass}
+          topHandCount={topPlayer?.hand.length ?? 0}
+          leftHandCount={leftPlayer?.hand.length ?? 0}
+          rightHandCount={rightPlayer?.hand.length ?? 0}
+          activeSeat={activeSeat}
+          bottomTeam={currentPlayer?.team ?? null}
+          leftTeam={leftPlayer?.team ?? null}
+          topTeam={topPlayer?.team ?? null}
+          rightTeam={rightPlayer?.team ?? null}
+          quality={renderQuality}
+          fullscreen
+        />
+
+        <div className="absolute top-3 right-3 z-40 flex items-center gap-2">
+          <select
+            value={renderQuality}
+            onChange={(e) => setRenderQuality(e.target.value as RenderQuality)}
+            className="bg-black/55 border border-white/20 text-white text-xs rounded-lg px-2 py-1 outline-none"
+            title="3D quality"
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+
+          <button
+            onClick={exitBoardFullscreen}
+            className="px-2 py-1 rounded-lg bg-black/55 border border-white/20 text-white text-xs"
+            title="Exit fullscreen"
+          >
+            Exit Fullscreen
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen relative overflow-hidden safe-area-pad">
       <AnimatedBackground />
@@ -1012,6 +1167,25 @@ export default function GamePage() {
           </div>
 
           <div className="header-actions hidden sm:flex items-center gap-2">
+            <select
+              value={renderQuality}
+              onChange={(e) =>
+                setRenderQuality(e.target.value as RenderQuality)
+              }
+              className="px-2 py-2 rounded-xl bg-white/5 text-white/80 border border-white/10 text-sm"
+              title="3D Quality"
+            >
+              <option value="low">Quality: Low</option>
+              <option value="medium">Quality: Medium</option>
+              <option value="high">Quality: High</option>
+            </select>
+            <button
+              onClick={enterBoardFullscreen}
+              className="px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/5 text-white/80 hover:bg-white/10 hover:text-white border border-white/10 transition-all font-semibold text-xs sm:text-sm"
+              title="Fullscreen board"
+            >
+              Fullscreen
+            </button>
             <button
               onClick={copyRoomCode}
               className="p-2 sm:p-3 rounded-xl bg-white/5 text-white/80 hover:bg-white/10 hover:text-white border border-white/5 transition-all"
@@ -1053,6 +1227,18 @@ export default function GamePage() {
             </p>
           )}
           <div className="flex items-center gap-1">
+            <select
+              value={renderQuality}
+              onChange={(e) =>
+                setRenderQuality(e.target.value as RenderQuality)
+              }
+              className="p-1 rounded bg-white/10 text-[10px] text-white"
+              title="3D quality"
+            >
+              <option value="low">L</option>
+              <option value="medium">M</option>
+              <option value="high">H</option>
+            </select>
             <button
               onClick={copyRoomCode}
               className="p-1 rounded bg-white/10 text-[10px]"
@@ -1226,6 +1412,7 @@ export default function GamePage() {
               leftTeam={leftPlayer?.team ?? null}
               topTeam={topPlayer?.team ?? null}
               rightTeam={rightPlayer?.team ?? null}
+              quality={renderQuality}
             />
             <div className="mt-3 sm:mt-6 bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/10">
               <h3 className="text-lg sm:text-2xl font-bold text-white mb-1 sm:mb-2">
@@ -1389,6 +1576,7 @@ export default function GamePage() {
               leftTeam={leftPlayer?.team ?? null}
               topTeam={topPlayer?.team ?? null}
               rightTeam={rightPlayer?.team ?? null}
+              quality={renderQuality}
             />
           </>
         )}

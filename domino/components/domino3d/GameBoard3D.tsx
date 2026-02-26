@@ -7,6 +7,8 @@ import type { Domino, Team } from "../../lib/gameTypes";
 import { GameScene } from "./GameScene";
 import { BoardBadge, EndLabels, TurnOverlay } from "./Overlays";
 
+export type RenderQuality = "low" | "medium" | "high";
+
 export interface GameBoard3DProps {
   board: Domino[];
   boardLeftEnd: number;
@@ -30,6 +32,9 @@ export interface GameBoard3DProps {
   leftTeam?: Team | null;
   topTeam?: Team | null;
   rightTeam?: Team | null;
+  quality?: RenderQuality;
+  containerClassName?: string;
+  fullscreen?: boolean;
 }
 
 function GameBoard3DComponent({
@@ -55,32 +60,67 @@ function GameBoard3DComponent({
   leftTeam = null,
   topTeam = null,
   rightTeam = null,
+  quality = "medium",
+  containerClassName,
+  fullscreen = false,
 }: GameBoard3DProps) {
-  const handleCreated = useCallback(({ gl }: { gl: THREE.WebGLRenderer }) => {
-    gl.setPixelRatio(1);
-    gl.outputColorSpace = THREE.SRGBColorSpace;
-    gl.toneMapping = THREE.NoToneMapping;
-  }, []);
+  const qualityConfig =
+    quality === "low"
+      ? {
+          dpr: [0.75, 1] as [number, number],
+          antialias: false,
+          shadows: false,
+          powerPreference: "high-performance" as const,
+        }
+      : quality === "high"
+        ? {
+            dpr: [1, 1.5] as [number, number],
+            antialias: true,
+            shadows: true,
+            powerPreference: "high-performance" as const,
+          }
+        : {
+            dpr: [1, 1] as [number, number],
+            antialias: false,
+            shadows: false,
+            powerPreference: "high-performance" as const,
+          };
+
+  const handleCreated = useCallback(
+    ({ gl }: { gl: THREE.WebGLRenderer }) => {
+      gl.setPixelRatio(1);
+      gl.outputColorSpace = THREE.SRGBColorSpace;
+      gl.toneMapping =
+        quality === "high" ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+    },
+    [quality],
+  );
+
+  const boardWrapperClassName = fullscreen
+    ? `board-wrapper relative w-screen h-dvh min-h-dvh bg-black ${containerClassName ?? ""}`
+    : `board-wrapper relative w-full rounded-xl sm:rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl bg-gradient-to-b from-emerald-900/60 to-emerald-950/80 p-0.5 sm:p-1 md:p-2 h-[50vh] sm:h-[55vh] md:h-[65vh] landscape:h-[70vh] min-h-60 sm:min-h-75 md:min-h-130 ${containerClassName ?? ""}`;
 
   return (
-    <div className="board-wrapper relative w-full rounded-xl sm:rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl bg-gradient-to-b from-emerald-900/60 to-emerald-950/80 p-0.5 sm:p-1 md:p-2 h-[50vh] sm:h-[55vh] md:h-[65vh] landscape:h-[70vh] min-h-60 sm:min-h-75 md:min-h-130">
+    <div className={boardWrapperClassName}>
       {/* Soft inner shadow */}
-      <div
-        className="absolute inset-0 rounded-3xl pointer-events-none"
-        style={{ boxShadow: "inset 0 0 120px rgba(0,0,0,.35)" }}
-      />
+      {!fullscreen && (
+        <div
+          className="absolute inset-0 rounded-3xl pointer-events-none"
+          style={{ boxShadow: "inset 0 0 120px rgba(0,0,0,.35)" }}
+        />
+      )}
 
       <Canvas
-        shadows={false}
-        dpr={[1, 1]}
+        shadows={qualityConfig.shadows}
+        dpr={qualityConfig.dpr}
         camera={{ position: [0, 12, 14], fov: 45 }}
         gl={{
-          antialias: false,
+          antialias: qualityConfig.antialias,
           alpha: false,
-          powerPreference: "high-performance",
+          powerPreference: qualityConfig.powerPreference,
         }}
         style={{
-          borderRadius: 24,
+          borderRadius: fullscreen ? 0 : 24,
           background: "linear-gradient(180deg,#0a2e1a 0%,#153d25 100%)",
         }}
         onCreated={handleCreated}
