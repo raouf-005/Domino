@@ -24,8 +24,8 @@ const GameBoard3DNoSSR = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="board-wrapper w-full h-[45vh] sm:h-[50vh] md:h-[65vh] min-h-60 sm:min-h-75 md:min-h-130 bg-green-900/50 rounded-xl sm:rounded-2xl md:rounded-3xl animate-pulse flex items-center justify-center text-white/50 text-sm sm:text-lg md:text-xl">
-        Loading 3D Board...
+      <div className="board-wrapper w-full h-[calc(100dvh-3rem)] sm:h-[50vh] md:h-[65vh] min-h-60 sm:min-h-75 md:min-h-130 bg-green-900/50 rounded-xl sm:rounded-2xl md:rounded-3xl animate-pulse flex items-center justify-center text-white/50 text-sm sm:text-lg md:text-xl">
+        Loading board...
       </div>
     ),
   },
@@ -1039,7 +1039,7 @@ export default function GamePage() {
         </div>
       </div>
 
-      <div className="game-shell relative z-10 p-3 md:p-6 max-w-7xl mx-auto">
+      <div className="game-shell relative z-10 p-1 sm:p-3 md:p-6 max-w-7xl mx-auto w-full">
         {/* Error Toast */}
         <AnimatePresence>
           {error && (

@@ -141,7 +141,7 @@ body {
   }
 
   .board-wrapper {
-    height: calc(100vh - 80px) !important; /* canvas fills almost full screen */
+    height: calc(100dvh - 42px) !important;
     min-height: unset !important;
     border-radius: 12px !important;
     padding: 2px !important;

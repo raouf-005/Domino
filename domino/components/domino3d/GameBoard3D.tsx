@@ -98,7 +98,7 @@ function GameBoard3DComponent({
 
   const boardWrapperClassName = fullscreen
     ? `board-wrapper relative w-screen h-dvh min-h-dvh bg-black ${containerClassName ?? ""}`
-    : `board-wrapper relative w-full rounded-xl sm:rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl bg-gradient-to-b from-emerald-900/60 to-emerald-950/80 p-0.5 sm:p-1 md:p-2 h-[50vh] sm:h-[55vh] md:h-[65vh] landscape:h-[70vh] min-h-60 sm:min-h-75 md:min-h-130 ${containerClassName ?? ""}`;
+    : `board-wrapper relative w-full rounded-xl sm:rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl bg-gradient-to-b from-emerald-900/60 to-emerald-950/80 p-0.5 sm:p-1 md:p-2 h-[calc(100dvh-3.25rem)] sm:h-[55vh] md:h-[65vh] landscape:h-[70vh] min-h-60 sm:min-h-75 md:min-h-130 ${containerClassName ?? ""}`;
 
   return (
     <div className={boardWrapperClassName}>

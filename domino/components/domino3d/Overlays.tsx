@@ -31,24 +31,19 @@ export function EndLabels({ left, right }: { left: number; right: number }) {
   return (
     <div className="end-labels absolute top-2 sm:top-4 left-0 right-0 flex justify-between px-3 sm:px-6 pointer-events-none">
       <span className="bg-black/40 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-full font-mono backdrop-blur-sm text-xs sm:text-lg">
-        {"<"} {left >= 0 ? left : "-"}
+        {/*      {left >= 0 ? left : "-"} */}
       </span>
-      <span className="text-white/80 font-semibold text-xs sm:text-lg backdrop-blur-sm bg-black/20 px-2 py-0.5 sm:px-4 sm:py-1 rounded-full hidden sm:block">
+      <span className="bg-gradient-to-r from-blue-500/60 to-purple-500/60 text-white font-bold text-xs sm:text-sm backdrop-blur-md px-3 py-0.5 sm:px-3 sm:py-0.5 rounded-full shadow-lg border border-white/20">
         Game Board
       </span>
       <span className="bg-black/40 text-white px-2 py-0.5 sm:px-3 sm:py-1 rounded-full font-mono backdrop-blur-sm text-xs sm:text-lg">
-        {right >= 0 ? right : "-"} {">"}
+        {/*         {right >= 0 ? right : "-"}
+         */}{" "}
       </span>
     </div>
   );
 }
 
 export function BoardBadge() {
-  return (
-    <div className="absolute top-2 right-2 sm:top-3 sm:right-4 pointer-events-none">
-      <span className="inline-flex items-center gap-1 sm:gap-2 bg-black/40 text-white/90 text-[9px] sm:text-xs px-2 py-0.5 sm:px-3 sm:py-1 rounded-full backdrop-blur-md border border-white/10 shadow-lg">
-        3D Board
-      </span>
-    </div>
-  );
+  return null;
 }
