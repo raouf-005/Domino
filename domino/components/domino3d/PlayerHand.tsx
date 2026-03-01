@@ -7,11 +7,13 @@ interface HandProps {
   myTurn: boolean;
   sides: (d: Domino) => Side[];
   onPlay: (id: string, s: Side) => void;
-  onDrag: (a: boolean, s: Side[]) => void;
+  onDrag: (
+    active: boolean,
+    sides: Side[],
+    proximity: { left: number; right: number },
+  ) => void;
   leftDrop: Vec3;
   rightDrop: Vec3;
-  boardLeftEnd: number;
-  boardRightEnd: number;
 }
 
 export function PlayerHand({
@@ -22,8 +24,6 @@ export function PlayerHand({
   onDrag,
   leftDrop,
   rightDrop,
-  boardLeftEnd,
-  boardRightEnd,
 }: HandProps) {
   return (
     <>
@@ -42,8 +42,6 @@ export function PlayerHand({
             onDrag={onDrag}
             leftDrop={leftDrop}
             rightDrop={rightDrop}
-            boardLeftEnd={boardLeftEnd}
-            boardRightEnd={boardRightEnd}
           />
         );
       })}

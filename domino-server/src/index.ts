@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer } from "http";
 import cors from "cors";
-import { Server } from "socket.io";
+import { Server, Socket } from "socket.io";
 import { v4 as uuidv4 } from "uuid";
 import {
   GameState,
@@ -10,6 +10,7 @@ import {
   Team,
   GameMode,
   AIDifficulty,
+  DeviceMetadata,
   generateDominoes,
   shuffle,
   canPlayDomino,
@@ -60,8 +61,72 @@ const playerSockets: Map<string, string> = new Map(); // socketId -> playerId
 // Device-based session tracking for reconnection
 const deviceSessions: Map<
   string,
-  { playerId: string; gameId: string; playerName: string }
+  {
+    playerId: string;
+    gameId: string;
+    playerName: string;
+    deviceMeta?: DeviceMetadata;
+    lastSeenIp?: string;
+  }
 > = new Map();
+const deviceAliasesToSessionKey: Map<string, string> = new Map();
+
+function getClientIp(
+  socket: Socket<ClientToServerEvents, ServerToClientEvents>,
+): string | undefined {
+  const forwarded = socket.handshake.headers["x-forwarded-for"];
+  const firstForwarded =
+    typeof forwarded === "string" ? forwarded.split(",")[0]?.trim() : undefined;
+  return firstForwarded || socket.handshake.address || undefined;
+}
+
+function buildSessionAliases(
+  deviceId?: string,
+  deviceMeta?: DeviceMetadata,
+  ip?: string,
+): string[] {
+  const aliases = new Set<string>();
+  if (deviceId?.trim()) aliases.add(`id:${deviceId.trim()}`);
+  if (deviceMeta?.machineFingerprint?.trim()) {
+    aliases.add(`fp:${deviceMeta.machineFingerprint.trim()}`);
+  }
+  if (deviceMeta?.macAddress?.trim()) {
+    aliases.add(`mac:${deviceMeta.macAddress.trim().toLowerCase()}`);
+  }
+  if (ip?.trim()) aliases.add(`ip:${ip.trim()}`);
+  return Array.from(aliases);
+}
+
+function registerDeviceSession(
+  sessionKey: string,
+  session: {
+    playerId: string;
+    gameId: string;
+    playerName: string;
+    deviceMeta?: DeviceMetadata;
+    lastSeenIp?: string;
+  },
+  aliases: string[],
+) {
+  deviceSessions.set(sessionKey, session);
+  for (const alias of aliases) {
+    deviceAliasesToSessionKey.set(alias, sessionKey);
+  }
+}
+
+function resolveSessionKey(
+  deviceId?: string,
+  deviceMeta?: DeviceMetadata,
+  ip?: string,
+): string | null {
+  const aliases = buildSessionAliases(deviceId, deviceMeta, ip);
+  for (const alias of aliases) {
+    if (deviceSessions.has(alias)) return alias;
+    const mapped = deviceAliasesToSessionKey.get(alias);
+    if (mapped) return mapped;
+  }
+  return null;
+}
 
 // AI Names
 const AI_NAMES = ["Bot Alpha", "Bot Beta", "Bot Gamma", "Bot Delta"];
@@ -892,13 +957,19 @@ io.on("connection", (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
   // Reconnect handler
-  socket.on("reconnectGame", ({ deviceId }) => {
-    if (!deviceId) {
-      socket.emit("error", "No device ID provided.");
+  socket.on("reconnectGame", ({ deviceId, deviceMeta }) => {
+    const clientIp = getClientIp(socket);
+    if (
+      !deviceId &&
+      !deviceMeta?.machineFingerprint &&
+      !deviceMeta?.macAddress
+    ) {
+      socket.emit("error", "No machine identity provided.");
       return;
     }
 
-    const session = deviceSessions.get(deviceId);
+    const sessionKey = resolveSessionKey(deviceId, deviceMeta, clientIp);
+    const session = sessionKey ? deviceSessions.get(sessionKey) : undefined;
     if (!session) {
       socket.emit("error", "No active session found for this device.");
       return;
@@ -906,14 +977,14 @@ io.on("connection", (socket) => {
 
     const game = games.get(session.gameId);
     if (!game) {
-      deviceSessions.delete(deviceId);
+      if (sessionKey) deviceSessions.delete(sessionKey);
       socket.emit("error", "Game no longer exists.");
       return;
     }
 
     const player = game.players.find((p) => p.id === session.playerId);
     if (!player) {
-      deviceSessions.delete(deviceId);
+      if (sessionKey) deviceSessions.delete(sessionKey);
       socket.emit("error", "Player no longer in game.");
       return;
     }
@@ -926,10 +997,27 @@ io.on("connection", (socket) => {
     playerSockets.delete(oldSocketId);
     playerSockets.set(socket.id, player.id);
 
+    if (sessionKey) {
+      registerDeviceSession(
+        sessionKey,
+        {
+          ...session,
+          playerId: socket.id,
+          deviceMeta: deviceMeta ?? session.deviceMeta,
+          lastSeenIp: clientIp,
+        },
+        buildSessionAliases(
+          deviceId,
+          deviceMeta ?? session.deviceMeta,
+          clientIp,
+        ),
+      );
+    }
+
     socket.join(session.gameId);
     game.lastAction = `${player.name} reconnected`;
     console.log(
-      `[Reconnect] ${player.name} (device=${deviceId}) rejoined game ${session.gameId}`,
+      `[Reconnect] ${player.name} (device=${deviceId || deviceMeta?.machineFingerprint || "unknown"}, ip=${clientIp || "n/a"}) rejoined game ${session.gameId}`,
     );
 
     socket.emit("reconnected", {
@@ -942,7 +1030,16 @@ io.on("connection", (socket) => {
   // Create AI Game
   socket.on(
     "createAIGame",
-    ({ gameId, playerName, team, gameMode, aiDifficulty, deviceId }) => {
+    ({
+      gameId,
+      playerName,
+      team,
+      gameMode,
+      aiDifficulty,
+      deviceId,
+      deviceMeta,
+    }) => {
+      const clientIp = getClientIp(socket);
       let game = games.get(gameId);
       if (game) {
         socket.emit("error", "Game room already exists! Try a different code.");
@@ -966,11 +1063,18 @@ io.on("connection", (socket) => {
       playerSockets.set(socket.id, humanPlayer.id);
 
       if (deviceId) {
-        deviceSessions.set(deviceId, {
-          playerId: socket.id,
-          gameId,
-          playerName,
-        });
+        const sessionKey = `id:${deviceId}`;
+        registerDeviceSession(
+          sessionKey,
+          {
+            playerId: socket.id,
+            gameId,
+            playerName,
+            deviceMeta,
+            lastSeenIp: clientIp,
+          },
+          buildSessionAliases(deviceId, deviceMeta, clientIp),
+        );
       }
 
       if (gameMode === "vs-ai") {
@@ -999,55 +1103,66 @@ io.on("connection", (socket) => {
   );
 
   // Join multiplayer game
-  socket.on("joinGame", ({ gameId, playerName, team, deviceId }) => {
-    let game = games.get(gameId);
-    if (!game) {
-      game = createGame(gameId);
-      games.set(gameId, game);
-    }
+  socket.on(
+    "joinGame",
+    ({ gameId, playerName, team, deviceId, deviceMeta }) => {
+      const clientIp = getClientIp(socket);
+      let game = games.get(gameId);
+      if (!game) {
+        game = createGame(gameId);
+        games.set(gameId, game);
+      }
 
-    const teamPlayers = game.players.filter((p) => p.team === team);
-    if (teamPlayers.length >= 2) {
-      socket.emit("error", `Team ${team === "team1" ? "1" : "2"} is full!`);
-      return;
-    }
-    if (game.players.length >= 4) {
-      socket.emit("error", "Game is full!");
-      return;
-    }
-    if (game.gamePhase !== "waiting") {
-      socket.emit("error", "Game already started!");
-      return;
-    }
+      const teamPlayers = game.players.filter((p) => p.team === team);
+      if (teamPlayers.length >= 2) {
+        socket.emit("error", `Team ${team === "team1" ? "1" : "2"} is full!`);
+        return;
+      }
+      if (game.players.length >= 4) {
+        socket.emit("error", "Game is full!");
+        return;
+      }
+      if (game.gamePhase !== "waiting") {
+        socket.emit("error", "Game already started!");
+        return;
+      }
 
-    const player: Player = {
-      id: socket.id,
-      name: playerName,
-      team,
-      hand: [],
-      isReady: true,
-      isConnected: true,
-      isAI: false,
-    };
+      const player: Player = {
+        id: socket.id,
+        name: playerName,
+        team,
+        hand: [],
+        isReady: true,
+        isConnected: true,
+        isAI: false,
+      };
 
-    game.players.push(player);
-    playerSockets.set(socket.id, player.id);
+      game.players.push(player);
+      playerSockets.set(socket.id, player.id);
 
-    if (deviceId) {
-      deviceSessions.set(deviceId, {
-        playerId: socket.id,
-        gameId,
-        playerName,
-      });
-    }
+      if (deviceId) {
+        const sessionKey = `id:${deviceId}`;
+        registerDeviceSession(
+          sessionKey,
+          {
+            playerId: socket.id,
+            gameId,
+            playerName,
+            deviceMeta,
+            lastSeenIp: clientIp,
+          },
+          buildSessionAliases(deviceId, deviceMeta, clientIp),
+        );
+      }
 
-    resortPlayers(game);
-    socket.join(gameId);
-    game.lastAction = `${playerName} joined ${team === "team1" ? "Team 1" : "Team 2"}`;
+      resortPlayers(game);
+      socket.join(gameId);
+      game.lastAction = `${playerName} joined ${team === "team1" ? "Team 1" : "Team 2"}`;
 
-    io.to(gameId).emit("gameState", game);
-    console.log(`${playerName} joined game ${gameId} on ${team}`);
-  });
+      io.to(gameId).emit("gameState", game);
+      console.log(`${playerName} joined game ${gameId} on ${team}`);
+    },
+  );
 
   // Start game
   socket.on("startGame", (gameId) => {

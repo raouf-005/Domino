@@ -20,7 +20,7 @@
  * at the edge of a domino table and looking down.
  */
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Platform,
   ScrollView,
@@ -36,7 +36,7 @@ import Animated, {
   FadeInUp,
   ZoomIn,
 } from "react-native-reanimated";
-import Board3D from "../components/Board3D";
+import Board3D, { type RenderQuality } from "../components/Board3D";
 import DominoTile3D from "../components/DominoTile3D";
 import DraggableHandTile from "../components/DraggableHandTile";
 import OpponentCard from "../components/OpponentCard";
@@ -78,6 +78,47 @@ export default function GameScreen() {
   const isLandscape = W > H;
   const hudTop = isLandscape ? 4 : STATUS_BAR_H;
   const handPad = isLandscape ? 8 : H < 700 ? 14 : 22;
+
+  // ── Fullscreen & quality state (like web version) ──
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [renderQuality, setRenderQuality] = useState<RenderQuality>("medium");
+
+  // Force-remount GLView on orientation change to fix canvas sizing
+  const [glKey, setGlKey] = useState(0);
+  useEffect(() => {
+    setGlKey((k) => k + 1);
+  }, [isLandscape]);
+
+  // Hide status bar in fullscreen
+  useEffect(() => {
+    if (isFullscreen) {
+      StatusBar.setHidden(true, "slide");
+    } else {
+      StatusBar.setHidden(false, "slide");
+    }
+  }, [isFullscreen]);
+
+  const toggleFullscreen = useCallback(async () => {
+    const next = !isFullscreen;
+    setIsFullscreen(next);
+    if (ScreenOrientation) {
+      if (next) {
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
+        );
+      } else {
+        await ScreenOrientation.unlockAsync();
+      }
+    }
+  }, [isFullscreen]);
+
+  const cycleQuality = useCallback(() => {
+    setRenderQuality((prev) => {
+      if (prev === "low") return "medium";
+      if (prev === "medium") return "high";
+      return "low";
+    });
+  }, []);
 
   const [dragOverSide, setDragOverSide] = useState<"left" | "right" | null>(
     null,
@@ -345,6 +386,141 @@ export default function GameScreen() {
     </View>
   );
 
+  // ================================================================
+  // ---- FULLSCREEN MODE ----
+  // ================================================================
+  if (isFullscreen) {
+    return (
+      <View style={styles.fullscreenContainer}>
+        <View style={styles.fullscreenBoard} key={`fs-board-${glKey}`}>
+          <Board3D
+            board={gameState.board}
+            boardLeftEnd={gameState.boardLeftEnd}
+            boardRightEnd={gameState.boardRightEnd}
+            dragOverSide={dragOverSide}
+            opponents={boardOpponents}
+            activeSlot={activeSlot}
+            quality={renderQuality}
+          />
+        </View>
+
+        {/* Fullscreen HUD overlay */}
+        <View style={styles.fsHudTop}>
+          {/* Score pill */}
+          <View style={styles.scorePill}>
+            <View style={styles.scoreTeamDot1} />
+            <Text style={styles.scorePillVal}>{gameState.scores.team1}</Text>
+            <View style={styles.scoreDivider} />
+            <View style={styles.scoreTeamDot2} />
+            <Text style={styles.scorePillVal}>{gameState.scores.team2}</Text>
+          </View>
+          {/* Turn text */}
+          <View style={styles.fsTurnPill}>
+            <View
+              style={[
+                styles.turnDot,
+                {
+                  backgroundColor:
+                    currentTurn?.team === "team1" ? Colors.team1 : Colors.team2,
+                },
+              ]}
+            />
+            <Text
+              style={[
+                styles.turnText,
+                isMyTurn && { color: Colors.amber, fontWeight: "800" },
+              ]}
+              numberOfLines={1}
+            >
+              {isMyTurn ? "⚡ Your Turn" : `${currentTurn?.name}'s turn`}
+            </Text>
+          </View>
+          {/* Exit fullscreen */}
+          <TouchableOpacity onPress={toggleFullscreen} style={styles.fsExitBtn}>
+            <Text style={styles.fsExitBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Hand in fullscreen — compact bottom strip */}
+        <View style={styles.fsHandStrip}>
+          <LinearGradient
+            colors={["rgba(6,15,29,0.9)", "rgba(10,25,47,0.95)"]}
+            style={styles.fsHandBg}
+            pointerEvents="none"
+          />
+          <View style={styles.fsHandContent}>
+            <View style={styles.handLabelRow}>
+              <Text style={styles.handLabel}>
+                🃏 {currentPlayer?.hand.length || 0}
+              </Text>
+              {canPass && isMyTurn && (
+                <TouchableOpacity onPress={pass} activeOpacity={0.7}>
+                  <LinearGradient
+                    colors={["rgba(245,158,11,0.15)", "rgba(245,158,11,0.05)"]}
+                    style={styles.passBtn}
+                  >
+                    <Text style={styles.passBtnText}>Pass ⏭</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.fsHandTiles}
+            >
+              {currentPlayer?.hand.map((domino, index) => {
+                const sides = getPlayableSides(domino);
+                const playable = isMyTurn && sides.length > 0;
+                return (
+                  <DraggableHandTile
+                    key={domino.id}
+                    domino={domino}
+                    playable={playable}
+                    isMyTurn={isMyTurn}
+                    index={index}
+                    tileSize="tiny"
+                    compact
+                    playableSides={sides}
+                    onPlay={handlePlay}
+                    onDragStateChange={handleDragStateChange}
+                  />
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Floating toolbar in fullscreen */}
+        <View style={[styles.floatingToolbar, { bottom: 80 }]}>
+          <TouchableOpacity
+            style={styles.toolbarBtn}
+            activeOpacity={0.7}
+            onPress={cycleQuality}
+          >
+            <Text style={styles.toolbarBtnText}>
+              {renderQuality === "low"
+                ? "🔋"
+                : renderQuality === "medium"
+                  ? "⚡"
+                  : "✨"}
+            </Text>
+            <Text style={styles.toolbarBtnLabel}>
+              {renderQuality.charAt(0).toUpperCase() + renderQuality.slice(1)}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolbarBtn}
+            activeOpacity={0.7}
+            onPress={toggleFullscreen}
+          >
+            <Text style={styles.toolbarBtnText}>⛶</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <LinearGradient
       colors={["#060f1d", "#0a192f", "#0d1f2d"]}
@@ -419,7 +595,7 @@ export default function GameScreen() {
 
       {/* ── Main content: 3D board + hand tray ── */}
       <>
-        <View style={styles.boardFlex}>
+        <View style={styles.boardFlex} key={`board-${glKey}`}>
           <Board3D
             board={gameState.board}
             boardLeftEnd={gameState.boardLeftEnd}
@@ -427,30 +603,61 @@ export default function GameScreen() {
             dragOverSide={dragOverSide}
             opponents={boardOpponents}
             activeSlot={activeSlot}
+            quality={renderQuality}
           />
         </View>
         {handContent}
       </>
 
-      {/* ── Rotate screen button ── */}
-      <TouchableOpacity
-        style={styles.rotateBtn}
-        activeOpacity={0.7}
-        onPress={async () => {
-          if (!ScreenOrientation) return;
-          if (isLandscape) {
-            await ScreenOrientation.lockAsync(
-              ScreenOrientation.OrientationLock.PORTRAIT_UP,
-            );
-          } else {
-            await ScreenOrientation.lockAsync(
-              ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
-            );
-          }
-        }}
-      >
-        <Text style={styles.rotateBtnText}>{isLandscape ? "📱" : "📲"}</Text>
-      </TouchableOpacity>
+      {/* ── Floating toolbar: fullscreen + quality + rotate ── */}
+      <View style={styles.floatingToolbar}>
+        {/* Quality button */}
+        <TouchableOpacity
+          style={styles.toolbarBtn}
+          activeOpacity={0.7}
+          onPress={cycleQuality}
+        >
+          <Text style={styles.toolbarBtnText}>
+            {renderQuality === "low"
+              ? "🔋"
+              : renderQuality === "medium"
+                ? "⚡"
+                : "✨"}
+          </Text>
+          <Text style={styles.toolbarBtnLabel}>
+            {renderQuality.charAt(0).toUpperCase() + renderQuality.slice(1)}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Fullscreen button */}
+        <TouchableOpacity
+          style={styles.toolbarBtn}
+          activeOpacity={0.7}
+          onPress={toggleFullscreen}
+        >
+          <Text style={styles.toolbarBtnText}>⛶</Text>
+        </TouchableOpacity>
+
+        {/* Rotate screen button */}
+        <TouchableOpacity
+          style={styles.toolbarBtn}
+          activeOpacity={0.7}
+          onPress={async () => {
+            if (!ScreenOrientation) return;
+            if (isLandscape) {
+              await ScreenOrientation.lockAsync(
+                ScreenOrientation.OrientationLock.PORTRAIT_UP,
+              );
+            } else {
+              await ScreenOrientation.lockAsync(
+                ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
+              );
+            }
+          }}
+        >
+          <Text style={styles.toolbarBtnText}>{isLandscape ? "📱" : "📲"}</Text>
+        </TouchableOpacity>
+      </View>
     </LinearGradient>
   );
 }
@@ -461,23 +668,38 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-  // ── Rotate screen button ──
-  rotateBtn: {
+  // ── Floating toolbar ──
+  floatingToolbar: {
     position: "absolute",
-    right: 12,
-    bottom: 12,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    right: 8,
+    bottom: 8,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 16,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.15)",
     zIndex: 999,
   },
-  rotateBtnText: {
-    fontSize: 20,
+  toolbarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 3,
+  },
+  toolbarBtnText: {
+    fontSize: 16,
+  },
+  toolbarBtnLabel: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 9,
+    fontWeight: "700",
   },
 
   // ── Top bar ──
@@ -722,4 +944,92 @@ const styles = StyleSheet.create({
     borderColor: Colors.white10,
   },
   leaveBtnText: { color: Colors.white, fontWeight: "700", fontSize: 15 },
+  // ── Fullscreen styles ──
+  fullscreenContainer: {
+    flex: 1,
+    backgroundColor: "#060f1d",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+    zIndex: 9999,
+  },
+  fullscreenBoard: {
+    flex: 1,
+    borderRadius: 0,
+    overflow: "hidden",
+    backgroundColor: "#071a12",
+  },
+  fsHudTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 18,
+    paddingHorizontal: 12,
+    zIndex: 10,
+  },
+  fsTurnPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.32)",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 5,
+  },
+  fsExitBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  fsExitBtnText: { color: "#fca5a5", fontWeight: "700", fontSize: 18 },
+  fsHandStrip: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingBottom: 0,
+    zIndex: 10,
+  },
+  fsHandBg: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderBottomWidth: 0,
+  },
+  fsHandContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 60,
+    gap: 8,
+  },
+  fsHandTiles: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    paddingBottom: 4,
+  },
 });

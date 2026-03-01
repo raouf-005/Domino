@@ -5,7 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import type { Domino, Team } from "../../lib/gameTypes";
 import { GameScene } from "./GameScene";
-import { BoardBadge, EndLabels, TurnOverlay } from "./Overlays";
+import { BoardBadge, EndLabels } from "./Overlays";
 
 export type RenderQuality = "low" | "medium" | "high";
 
@@ -26,12 +26,15 @@ export interface GameBoard3DProps {
   revealTopHand?: Domino[];
   revealLeftHand?: Domino[];
   revealRightHand?: Domino[];
-  showTurnOverlay?: boolean;
   activeSeat?: "bottom" | "left" | "top" | "right" | null;
   bottomTeam?: Team | null;
   leftTeam?: Team | null;
   topTeam?: Team | null;
   rightTeam?: Team | null;
+  bottomPlayerName?: string;
+  leftPlayerName?: string;
+  topPlayerName?: string;
+  rightPlayerName?: string;
   quality?: RenderQuality;
   containerClassName?: string;
   fullscreen?: boolean;
@@ -54,12 +57,15 @@ function GameBoard3DComponent({
   revealTopHand = [],
   revealLeftHand = [],
   revealRightHand = [],
-  showTurnOverlay = true,
   activeSeat = null,
   bottomTeam = null,
   leftTeam = null,
   topTeam = null,
   rightTeam = null,
+  bottomPlayerName,
+  leftPlayerName,
+  topPlayerName,
+  rightPlayerName,
   quality = "medium",
   containerClassName,
   fullscreen = false,
@@ -146,26 +152,61 @@ function GameBoard3DComponent({
             leftTeam={leftTeam}
             topTeam={topTeam}
             rightTeam={rightTeam}
+            bottomPlayerName={bottomPlayerName}
+            leftPlayerName={leftPlayerName}
+            topPlayerName={topPlayerName}
+            rightPlayerName={rightPlayerName}
           />
         </Suspense>
       </Canvas>
 
       {/* UI Overlays */}
       <BoardBadge />
-
-      {showTurnOverlay && (
-        <TurnOverlay myTurn={isMyTurn} canPass={canPass} onPass={onPass} />
-      )}
-
       <EndLabels left={boardLeftEnd} right={boardRightEnd} />
 
-      {showTurnOverlay && hand.length > 0 && (
-        <div className="absolute bottom-10 sm:bottom-14 left-0 right-0 flex justify-center pointer-events-none">
-          <span className="text-white/60 text-[10px] sm:text-sm font-medium backdrop-blur-md bg-black/30 px-3 py-1 rounded-full">
-            {revealAllHands
-              ? "All hands revealed"
-              : `Your tiles (${hand.length})`}
+      {/* Turn indicator – absolute bottom-left */}
+      {isMyTurn && !revealAllHands && (
+        <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 z-10 flex items-center gap-2">
+          <span
+            className="animate-pulse inline-flex items-center gap-1.5 select-none"
+            style={{
+              padding: "6px 14px",
+              borderRadius: 16,
+              background:
+                "linear-gradient(135deg, rgba(16,185,129,0.85), rgba(5,150,105,0.75))",
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              boxShadow:
+                "0 0 16px rgba(16,185,129,0.5), 0 2px 8px rgba(0,0,0,0.35)",
+              border: "1px solid rgba(255,255,255,0.25)",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <span style={{ fontSize: 15 }}>🎲</span>
+            Your turn
           </span>
+          {canPass && (
+            <button
+              onClick={onPass}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 16,
+                background:
+                  "linear-gradient(135deg, rgba(239,68,68,0.85), rgba(220,38,38,0.75))",
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 700,
+                border: "1px solid rgba(255,255,255,0.25)",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              Pass
+            </button>
+          )}
         </div>
       )}
     </div>

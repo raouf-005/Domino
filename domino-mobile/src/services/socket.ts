@@ -1,6 +1,12 @@
 import { io, Socket } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ServerToClientEvents, ClientToServerEvents } from "../types/gameTypes";
+import { Platform } from "react-native";
+import Constants from "expo-constants";
+import {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  DeviceMetadata,
+} from "../types/gameTypes";
 
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -8,7 +14,7 @@ export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 // When running on a real device, use your machine's LAN IP  (e.g. 192.168.x.x)
 // When running on an Android emulator, use 10.0.2.2 for localhost
 // When running on an iOS simulator, use localhost
-const SERVER_URL = "http://10.61.11.163:3000"; // <-- UPDATE THIS
+const SERVER_URL = "https://domino-eqtk.onrender.com"; // <-- UPDATE THIS
 
 let socket: GameSocket | null = null;
 
@@ -47,4 +53,28 @@ export async function getDeviceId(): Promise<string> {
     Date.now().toString(36);
   await AsyncStorage.setItem(STORAGE_KEY, id);
   return id;
+}
+
+export async function getDeviceMetadata(): Promise<DeviceMetadata> {
+  const installId = await getDeviceId();
+  const modelName =
+    Constants.platform?.ios?.model ||
+    Constants.platform?.android?.model ||
+    Constants.deviceName ||
+    "unknown-mobile";
+
+  return {
+    machineFingerprint: installId,
+    platform: Platform.OS,
+    os: String(Platform.Version ?? "unknown"),
+    model: modelName,
+    userAgent: `expo-${Platform.OS}`,
+    language:
+      Array.isArray(Constants.systemLanguages) &&
+      Constants.systemLanguages.length > 0
+        ? Constants.systemLanguages[0]
+        : undefined,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    networkStatus: "online",
+  };
 }

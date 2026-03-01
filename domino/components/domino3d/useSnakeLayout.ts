@@ -11,6 +11,10 @@ import {
 } from "./constants";
 import type { LayoutItem, Vec3 } from "./types";
 
+interface SnakeLayoutOptions {
+  rowSpacing?: number;
+}
+
 export interface LayoutBounds {
   minX: number;
   maxX: number;
@@ -39,7 +43,12 @@ export interface LayoutBounds {
  * Consecutive pieces in the board array satisfy board[i].right === board[i+1].left,
  * so adjacent pieces always show matching numbers facing each other.
  */
-export function useSnakeLayout(board: Domino[]) {
+export function useSnakeLayout(
+  board: Domino[],
+  options: SnakeLayoutOptions = {},
+) {
+  const { rowSpacing = TURN_RADIUS } = options;
+
   return useMemo(() => {
     if (board.length === 0) {
       return {
@@ -57,35 +66,59 @@ export function useSnakeLayout(board: Domino[]) {
     let x = 0;
     let z = 0;
     let prevHalfW = 0;
+    // Track whether the previous piece was a turn piece so the next
+    // piece advances to the new row.
+    let needsRowAdvance = false;
 
     for (let i = 0; i < board.length; i++) {
       const d = board[i];
       const isDouble = d.left === d.right;
-      const halfW = (isDouble ? DOUBLE_W : NORMAL_W) / 2;
+      const chainHalfW = (isDouble ? DOUBLE_W : NORMAL_W) / 2;
+      let halfW = chainHalfW;
+      let isTurnPiece = false;
 
       if (i === 0) {
         // First piece at the origin — always centred
         x = 0;
         z = 0;
+      } else if (needsRowAdvance) {
+        // Previous piece was a turn piece → advance to the new row
+        needsRowAdvance = false;
+        z += rowSpacing;
+        x = x + dir * (prevHalfW + PIECE_GAP + halfW);
       } else {
         const nextX = x + dir * (prevHalfW + PIECE_GAP + halfW);
 
         // Would the piece overflow the table edge?
         if (Math.abs(nextX) > TABLE_HALF_W) {
-          // Drop to a new row, flip direction
-          z += TURN_RADIUS;
-          dir *= -1;
+          // ── Turn piece: rotate perpendicular to bridge the rows ──
+          isTurnPiece = true;
+
+          // A non-double tile rotated 90° occupies ~DOUBLE_W in X
+          if (!isDouble) halfW = DOUBLE_W / 2;
+
+          // Place at the edge of the current row (same z)
           x = x + dir * (prevHalfW + PIECE_GAP + halfW);
+
+          // Flip direction for subsequent pieces
+          dir *= -1;
+          needsRowAdvance = true;
         } else {
           x = nextX;
         }
       }
 
-      // Z rotation determines chain direction; doubles sit perpendicular (rotZ=0)
-      const rotZ = isDouble ? 0 : dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+      // Turn pieces & doubles face along Z (rotZ = 0);
+      // normal pieces face along X in the current direction.
+      const rotZ =
+        isTurnPiece || isDouble ? 0 : dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+
+      // Nudge turn pieces slightly toward the next row so they sit
+      // between the two rows and don't look identical to doubles.
+      const zOffset = isTurnPiece ? rowSpacing * 0.35 : 0;
 
       items.push({
-        pos: [x, 0.1, z] as Vec3,
+        pos: [x, 0.1, z + zOffset] as Vec3,
         rot: [-Math.PI / 2, 0, rotZ] as Vec3,
         isDouble,
       });
@@ -115,29 +148,20 @@ export function useSnakeLayout(board: Domino[]) {
     // ── Drop positions: just beyond the first / last piece ──────
     const first = items[0];
     const last = items[items.length - 1];
-    const fRotZ = first.rot[2];
-    const lRotZ = last.rot[2];
     const DROP_DIST = 2.2;
 
-    // rotZ > 0 → going right → left end is at −X
-    // rotZ < 0 → going left  → left end is at +X
-    // rotZ ≈ 0 → double      → left end at −Z
-    let leftDrop: Vec3;
-    if (Math.abs(fRotZ) > 0.01) {
-      const leftDir = -Math.sign(fRotZ); // opposite to chain direction
-      leftDrop = [first.pos[0] + leftDir * DROP_DIST, 0, first.pos[2]];
-    } else {
-      leftDrop = [first.pos[0], 0, first.pos[2] - DROP_DIST];
-    }
+    // Chain always starts going right (dir = 1). Left end = opposite.
+    const leftDrop: Vec3 = [first.pos[0] - 1 * DROP_DIST, 0, first.pos[2]];
 
+    // If the last piece is a turn piece the next tile goes on the row
+    // below it, not to the side.
     let rightDrop: Vec3;
-    if (Math.abs(lRotZ) > 0.01) {
-      const rightDir = Math.sign(lRotZ); // same as chain direction
-      rightDrop = [last.pos[0] + rightDir * DROP_DIST, 0, last.pos[2]];
+    if (needsRowAdvance) {
+      rightDrop = [last.pos[0], 0, last.pos[2] + rowSpacing];
     } else {
-      rightDrop = [last.pos[0], 0, last.pos[2] + DROP_DIST];
+      rightDrop = [last.pos[0] + dir * DROP_DIST, 0, last.pos[2]];
     }
 
     return { items, leftDrop, rightDrop, bounds };
-  }, [board]);
+  }, [board, rowSpacing]);
 }

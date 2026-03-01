@@ -9,6 +9,7 @@ import {
   Team,
   GameMode,
   AIDifficulty,
+  DeviceMetadata,
   canPlayDomino,
   ServerToClientEvents,
   ClientToServerEvents,
@@ -64,6 +65,22 @@ function getDeviceId(): string {
   id = "dev-" + Math.abs(hash).toString(36) + "-" + Date.now().toString(36);
   localStorage.setItem(STORAGE_KEY, id);
   return id;
+}
+
+function getWebDeviceMetadata(): DeviceMetadata {
+  if (typeof window === "undefined") return {};
+
+  return {
+    machineFingerprint: getDeviceId(),
+    platform: navigator.platform,
+    os: navigator.userAgent,
+    model: "browser",
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen: `${screen.width}x${screen.height}@${window.devicePixelRatio || 1}`,
+    networkStatus: navigator.onLine ? "online" : "offline",
+  };
 }
 // -------------------------------------------------------------------------
 
@@ -421,6 +438,9 @@ export default function GamePage() {
   const [aiDifficulty, setAIDifficulty] = useState<AIDifficulty>("medium");
   const [connectionKey, setConnectionKey] = useState(0);
   const deviceId = useRef(typeof window !== "undefined" ? getDeviceId() : "");
+  const deviceMeta = useRef<DeviceMetadata>(
+    typeof window !== "undefined" ? getWebDeviceMetadata() : {},
+  );
   const [reconnecting, setReconnecting] = useState(false);
   const [renderQuality, setRenderQuality] = useState<RenderQuality>("medium");
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -462,7 +482,11 @@ export default function GamePage() {
     // On connect (including auto-reconnect), try to rejoin via device ID
     newSocket.on("connect", () => {
       if (deviceId.current) {
-        newSocket.emit("reconnectGame", { deviceId: deviceId.current });
+        deviceMeta.current = getWebDeviceMetadata();
+        newSocket.emit("reconnectGame", {
+          deviceId: deviceId.current,
+          deviceMeta: deviceMeta.current,
+        });
       }
     });
 
@@ -522,6 +546,7 @@ export default function GamePage() {
         playerName: playerName.trim(),
         team: selectedTeam,
         deviceId: deviceId.current,
+        deviceMeta: deviceMeta.current,
       });
     } else {
       socket.emit("createAIGame", {
@@ -531,6 +556,7 @@ export default function GamePage() {
         gameMode,
         aiDifficulty,
         deviceId: deviceId.current,
+        deviceMeta: deviceMeta.current,
       });
     }
     setJoined(true);
@@ -952,6 +978,10 @@ export default function GamePage() {
           leftTeam={leftPlayer?.team ?? null}
           topTeam={topPlayer?.team ?? null}
           rightTeam={rightPlayer?.team ?? null}
+          bottomPlayerName={currentPlayer?.name}
+          leftPlayerName={leftPlayer?.name}
+          topPlayerName={topPlayer?.name}
+          rightPlayerName={rightPlayer?.name}
           quality={renderQuality}
           fullscreen
         />
@@ -996,6 +1026,10 @@ export default function GamePage() {
           leftTeam={leftPlayer?.team ?? null}
           topTeam={topPlayer?.team ?? null}
           rightTeam={rightPlayer?.team ?? null}
+          bottomPlayerName={currentPlayer?.name}
+          leftPlayerName={leftPlayer?.name}
+          topPlayerName={topPlayer?.name}
+          rightPlayerName={rightPlayer?.name}
           quality={renderQuality}
           fullscreen
         />
@@ -1406,12 +1440,15 @@ export default function GamePage() {
               revealTopHand={topPlayer?.hand ?? []}
               revealLeftHand={leftPlayer?.hand ?? []}
               revealRightHand={rightPlayer?.hand ?? []}
-              showTurnOverlay={false}
               activeSeat={null}
               bottomTeam={currentPlayer?.team ?? null}
               leftTeam={leftPlayer?.team ?? null}
               topTeam={topPlayer?.team ?? null}
               rightTeam={rightPlayer?.team ?? null}
+              bottomPlayerName={currentPlayer?.name}
+              leftPlayerName={leftPlayer?.name}
+              topPlayerName={topPlayer?.name}
+              rightPlayerName={rightPlayer?.name}
               quality={renderQuality}
             />
             <div className="mt-3 sm:mt-6 bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/10">
@@ -1576,6 +1613,10 @@ export default function GamePage() {
               leftTeam={leftPlayer?.team ?? null}
               topTeam={topPlayer?.team ?? null}
               rightTeam={rightPlayer?.team ?? null}
+              bottomPlayerName={currentPlayer?.name}
+              leftPlayerName={leftPlayer?.name}
+              topPlayerName={topPlayer?.name}
+              rightPlayerName={rightPlayer?.name}
               quality={renderQuality}
             />
           </>

@@ -18,8 +18,10 @@ import {
   getSocket,
   disconnectSocket,
   getDeviceId,
+  getDeviceMetadata,
   GameSocket,
 } from "../services/socket";
+import type { DeviceMetadata } from "../types/gameTypes";
 
 interface GameContextType {
   socket: GameSocket | null;
@@ -79,12 +81,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     { playerName: string; message: string }[]
   >([]);
   const deviceIdRef = useRef<string>("");
+  const deviceMetaRef = useRef<DeviceMetadata>({});
   const [connectionKey, setConnectionKey] = useState(0);
 
   // Init device ID
   useEffect(() => {
     getDeviceId().then((id) => {
       deviceIdRef.current = id;
+    });
+    getDeviceMetadata().then((meta) => {
+      deviceMetaRef.current = meta;
     });
   }, []);
 
@@ -115,7 +121,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     sock.on("connect", () => {
       if (deviceIdRef.current) {
-        sock.emit("reconnectGame", { deviceId: deviceIdRef.current });
+        sock.emit("reconnectGame", {
+          deviceId: deviceIdRef.current,
+          deviceMeta: deviceMetaRef.current,
+        });
       }
     });
 
@@ -138,6 +147,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         playerName: playerName.trim(),
         team: selectedTeam,
         deviceId: deviceIdRef.current,
+        deviceMeta: deviceMetaRef.current,
       });
     } else {
       socket.emit("createAIGame", {
@@ -147,6 +157,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         gameMode,
         aiDifficulty,
         deviceId: deviceIdRef.current,
+        deviceMeta: deviceMetaRef.current,
       });
     }
     setJoined(true);

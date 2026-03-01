@@ -10,6 +10,20 @@ export type Team = "team1" | "team2";
 export type GameMode = "multiplayer" | "vs-ai" | "with-ai-partner";
 export type AIDifficulty = "easy" | "medium" | "hard";
 
+export interface DeviceMetadata {
+  machineFingerprint?: string;
+  macAddress?: string;
+  localIp?: string;
+  platform?: string;
+  os?: string;
+  model?: string;
+  userAgent?: string;
+  language?: string;
+  timezone?: string;
+  screen?: string;
+  networkStatus?: "online" | "offline";
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -66,6 +80,7 @@ export interface ClientToServerEvents {
     playerName: string;
     team: Team;
     deviceId: string;
+    deviceMeta?: DeviceMetadata;
   }) => void;
   createAIGame: (data: {
     gameId: string;
@@ -74,8 +89,12 @@ export interface ClientToServerEvents {
     gameMode: GameMode;
     aiDifficulty: AIDifficulty;
     deviceId: string;
+    deviceMeta?: DeviceMetadata;
   }) => void;
-  reconnectGame: (data: { deviceId: string }) => void;
+  reconnectGame: (data: {
+    deviceId: string;
+    deviceMeta?: DeviceMetadata;
+  }) => void;
   startGame: (gameId: string) => void;
   playDomino: (data: {
     gameId: string;

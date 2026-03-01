@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useThree } from "@react-three/fiber";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Html, OrbitControls } from "@react-three/drei";
 import type { LayoutBounds } from "./useSnakeLayout";
+import { TURN_RADIUS } from "./constants";
 import type { Domino, Team } from "../../lib/gameTypes";
 import type { Side, Vec3 } from "./types";
 import { useSnakeLayout } from "./useSnakeLayout";
@@ -42,6 +43,11 @@ export function GameScene({
   leftTeam = null,
   topTeam = null,
   rightTeam = null,
+  bottomPlayerName,
+  leftPlayerName,
+  topPlayerName,
+  rightPlayerName,
+  snakeRowSpacing = TURN_RADIUS,
 }: {
   board: Domino[];
   hand: Domino[];
@@ -62,6 +68,11 @@ export function GameScene({
   leftTeam?: Team | null;
   topTeam?: Team | null;
   rightTeam?: Team | null;
+  bottomPlayerName?: string;
+  leftPlayerName?: string;
+  topPlayerName?: string;
+  rightPlayerName?: string;
+  snakeRowSpacing?: number;
 }) {
   const teamColors = {
     team1: "#4aa3ff",
@@ -75,9 +86,24 @@ export function GameScene({
     right: rightTeam,
   } as const;
   const [anyDrag, setAnyDrag] = useState(false);
-  const { items, leftDrop, rightDrop, bounds } = useSnakeLayout(board);
+  const [dragSides, setDragSides] = useState<Side[]>([]);
+  const [dragProximity, setDragProximity] = useState({ left: 0, right: 0 });
+  const { items, leftDrop, rightDrop, bounds } = useSnakeLayout(board, {
+    rowSpacing: snakeRowSpacing,
+  });
 
-  const onDrag = useCallback((active: boolean) => setAnyDrag(active), []);
+  const onDrag = useCallback(
+    (
+      active: boolean,
+      sides: Side[],
+      proximity: { left: number; right: number },
+    ) => {
+      setAnyDrag(active);
+      setDragSides(active ? sides : []);
+      setDragProximity(active ? proximity : { left: 0, right: 0 });
+    },
+    [],
+  );
 
   const lDrop = board.length === 0 ? ([0, 0, 0] as Vec3) : leftDrop;
   const rDrop = board.length === 0 ? ([0, 0, 0] as Vec3) : rightDrop;
@@ -103,7 +129,27 @@ export function GameScene({
         />
       )}
       <TeamSeatGlows seatTeams={seatTeams} teamColors={teamColors} />
+      <SeatNameLabels
+        bottom={bottomPlayerName}
+        left={leftPlayerName}
+        top={topPlayerName}
+        right={rightPlayerName}
+        seatTeams={seatTeams}
+        teamColors={teamColors}
+        activeSeat={activeSeat}
+      />
       <TurnSeatMarker seat={activeSeat} />
+      {!revealAllHands && (
+        <DropZoneGlow
+          leftDrop={lDrop}
+          rightDrop={rDrop}
+          myTurn={isMyTurn}
+          dragSides={dragSides}
+          dragging={anyDrag}
+          proximity={dragProximity}
+          boardCount={board.length}
+        />
+      )}
       {!revealAllHands && <BoardDominoes board={board} items={items} />}
       {!revealAllHands && (
         <PlayerHand
@@ -114,8 +160,6 @@ export function GameScene({
           onDrag={onDrag}
           leftDrop={lDrop}
           rightDrop={rDrop}
-          boardLeftEnd={boardLeftEnd}
-          boardRightEnd={boardRightEnd}
         />
       )}
       <CameraAutoFit bounds={bounds} boardCount={board.length} />
@@ -131,6 +175,238 @@ export function GameScene({
         enableDamping={false}
         target={[0, 0, 2]}
       />
+    </>
+  );
+}
+
+function SeatNameLabels({
+  bottom,
+  left,
+  top,
+  right,
+  seatTeams,
+  teamColors,
+  activeSeat,
+}: {
+  bottom?: string;
+  left?: string;
+  top?: string;
+  right?: string;
+  seatTeams: {
+    bottom: Team | null | undefined;
+    left: Team | null | undefined;
+    top: Team | null | undefined;
+    right: Team | null | undefined;
+  };
+  teamColors: { team1: string; team2: string };
+  activeSeat?: "bottom" | "left" | "top" | "right" | null;
+}) {
+  const names = { bottom, left, top, right } as const;
+
+  const positions: Record<"bottom" | "left" | "top" | "right", Vec3> = {
+    bottom: [0, 3.2, 17.5],
+    top: [0, 3.2, -17.5],
+    left: [-17.5, 3.2, 0],
+    right: [17.5, 3.2, 0],
+  };
+
+  return (
+    <>
+      {(Object.keys(names) as Array<keyof typeof names>).map((seat) => {
+        const name = names[seat];
+        if (!name) return null;
+        const team = seatTeams[seat];
+        const accent = team ? teamColors[team] : "#94a3b8";
+        const isActive = activeSeat === seat;
+        return (
+          <Html
+            key={seat}
+            position={positions[seat]}
+            center
+            distanceFactor={10}
+          >
+            <div
+              className="flex items-center gap-2 select-none pointer-events-none whitespace-nowrap"
+              style={{
+                padding: "8px 20px 8px 16px",
+                borderRadius: 28,
+                background: `linear-gradient(135deg, ${accent}30, rgba(0,0,0,0.7))`,
+                backdropFilter: "blur(10px)",
+                border: `2px solid ${accent}`,
+                boxShadow: isActive
+                  ? `0 0 20px ${accent}aa, 0 0 8px ${accent}60, inset 0 0 12px ${accent}20`
+                  : `0 0 12px ${accent}50, 0 0 4px rgba(0,0,0,0.5)`,
+                transition: "box-shadow 0.3s ease",
+              }}
+            >
+              {/* Team color dot */}
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 14,
+                  height: 14,
+                  borderRadius: "50%",
+                  background: accent,
+                  boxShadow: `0 0 8px ${accent}, 0 0 3px ${accent}`,
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  color: "#fff",
+                  fontSize: 36,
+                  fontWeight: 700,
+                  letterSpacing: 0.5,
+                  textShadow: `0 0 8px ${accent}80, 0 2px 4px rgba(0,0,0,0.6)`,
+                }}
+              >
+                {name}
+              </span>
+              {isActive && (
+                <span
+                  style={{
+                    fontSize: 28,
+                    marginLeft: 4,
+                    filter: "drop-shadow(0 0 4px rgba(255,200,0,0.8))",
+                  }}
+                >
+                  🎲
+                </span>
+              )}
+            </div>
+          </Html>
+        );
+      })}
+    </>
+  );
+}
+
+function DropZoneGlow({
+  leftDrop,
+  rightDrop,
+  myTurn,
+  dragSides,
+  dragging,
+  proximity,
+  boardCount,
+}: {
+  leftDrop: Vec3;
+  rightDrop: Vec3;
+  myTurn: boolean;
+  dragSides: Side[];
+  dragging: boolean;
+  proximity: { left: number; right: number };
+  boardCount: number;
+}) {
+  // Pulse clock for idle state (0→1→0 over ~2s)
+  const pulseRef = useRef(0);
+  useFrame((_, dt) => {
+    pulseRef.current = (pulseRef.current + dt * 1.8) % (Math.PI * 2);
+  });
+  const pulse = (Math.sin(pulseRef.current) + 1) / 2; // 0..1
+
+  if (!myTurn) return null;
+
+  // First tile: show a single centre glow
+  if (boardCount === 0) {
+    const idleOp = 0.14 + pulse * 0.12;
+    const idleEm = 0.5 + pulse * 0.6;
+    return (
+      <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.9, 1.45, 48]} />
+        <meshStandardMaterial
+          color="#a5f3fc"
+          emissive="#22d3ee"
+          emissiveIntensity={idleEm}
+          transparent
+          opacity={idleOp}
+        />
+      </mesh>
+    );
+  }
+
+  const leftActive = dragSides.length === 0 || dragSides.includes("left");
+  const rightActive = dragSides.length === 0 || dragSides.includes("right");
+  const leftBoost = dragging ? proximity.left : 0;
+  const rightBoost = dragging ? proximity.right : 0;
+
+  // Inner ring: opacity 0 at rest, glows on proximity
+  const leftInnerOpacity = leftBoost * 0.88;
+  const rightInnerOpacity = rightBoost * 0.88;
+  const leftInnerIntensity = leftBoost * 3.5;
+  const rightInnerIntensity = rightBoost * 3.5;
+
+  // Outer ring: also 0 at rest
+  const leftOuterOpacity = leftBoost * 0.5;
+  const rightOuterOpacity = rightBoost * 0.5;
+  const leftOuterIntensity = leftBoost * 1.8;
+  const rightOuterIntensity = rightBoost * 1.8;
+
+  return (
+    <>
+      {/* ── Left drop zone ── */}
+      {leftActive && (
+        <>
+          <mesh
+            position={[leftDrop[0], 0.055, leftDrop[2]]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[0.86, 1.22, 48]} />
+            <meshStandardMaterial
+              color="#93c5fd"
+              emissive="#60a5fa"
+              emissiveIntensity={leftInnerIntensity}
+              transparent
+              opacity={leftInnerOpacity}
+            />
+          </mesh>
+          <mesh
+            position={[leftDrop[0], 0.05, leftDrop[2]]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[1.25, 1.72, 48]} />
+            <meshStandardMaterial
+              color="#60a5fa"
+              emissive="#3b82f6"
+              emissiveIntensity={leftOuterIntensity}
+              transparent
+              opacity={leftOuterOpacity}
+            />
+          </mesh>
+        </>
+      )}
+
+      {/* ── Right drop zone ── */}
+      {rightActive && (
+        <>
+          <mesh
+            position={[rightDrop[0], 0.055, rightDrop[2]]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[0.86, 1.22, 48]} />
+            <meshStandardMaterial
+              color="#fdba74"
+              emissive="#fb923c"
+              emissiveIntensity={rightInnerIntensity}
+              transparent
+              opacity={rightInnerOpacity}
+            />
+          </mesh>
+          <mesh
+            position={[rightDrop[0], 0.05, rightDrop[2]]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[1.25, 1.72, 48]} />
+            <meshStandardMaterial
+              color="#fb923c"
+              emissive="#f97316"
+              emissiveIntensity={rightOuterIntensity}
+              transparent
+              opacity={rightOuterOpacity}
+            />
+          </mesh>
+        </>
+      )}
     </>
   );
 }
@@ -305,7 +581,13 @@ function HandArc({
         const yRot = Math.atan2(0 - x, 0 - z);
         const rot = new THREE.Euler(tilt, yRot, 0, "YXZ");
         return (
-          <mesh key={i} position={[x, y, z]} rotation={rot} geometry={TILE_BOX} material={TILE_MAT} />
+          <mesh
+            key={i}
+            position={[x, y, z]}
+            rotation={rot}
+            geometry={TILE_BOX}
+            material={TILE_MAT}
+          />
         );
       })}
     </>

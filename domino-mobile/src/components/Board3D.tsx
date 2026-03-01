@@ -1,9 +1,24 @@
 import { GLView } from "expo-gl";
 import { Renderer } from "expo-three";
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { PanResponder, PixelRatio, StyleSheet, Text, View } from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  PanResponder,
+  PixelRatio,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import * as THREE from "three";
 import { Domino } from "../types/gameTypes";
+
+export type RenderQuality = "low" | "medium" | "high";
 
 interface Opponent {
   name: string;
@@ -20,6 +35,7 @@ interface Props {
   dragOverSide: "left" | "right" | null;
   opponents?: { top?: Opponent; left?: Opponent; right?: Opponent };
   activeSlot?: ActiveSlot;
+  quality?: RenderQuality;
 }
 
 const TABLE_W = 40;
@@ -31,7 +47,14 @@ const TILE_L = 1.9;
 const TILE_H = 0.32;
 const TILE_GAP = 0.12;
 const ROW_SPACING = 2.2;
-const MAX_RENDER_PIXEL_RATIO = 1.5;
+const QUALITY_CONFIG: Record<
+  RenderQuality,
+  { maxDpr: number; shadows: boolean; shadowMapSize: number }
+> = {
+  low: { maxDpr: 1, shadows: false, shadowMapSize: 512 },
+  medium: { maxDpr: 1.5, shadows: false, shadowMapSize: 1024 },
+  high: { maxDpr: 2, shadows: true, shadowMapSize: 2048 },
+};
 
 const PIP_LAYOUT: Record<number, [number, number][]> = {
   0: [],
@@ -404,7 +427,9 @@ function Board3DInner({
   dragOverSide,
   opponents,
   activeSlot,
+  quality = "medium",
 }: Props) {
+  const qCfg = QUALITY_CONFIG[quality];
   const rendererRef = useRef<any>(null);
   const sceneRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
@@ -686,11 +711,14 @@ function Board3DInner({
       const { drawingBufferWidth: width, drawingBufferHeight: height } = gl;
 
       const renderer = new Renderer({ gl }) as any;
-      renderer.setPixelRatio(1);
+      const pr = Math.min(PixelRatio.get(), qCfg.maxDpr);
+      renderer.setPixelRatio(pr);
       renderer.setSize(width, height);
       renderer.setClearColor("#071a12");
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.BasicShadowMap;
+      renderer.shadowMap.enabled = qCfg.shadows;
+      renderer.shadowMap.type = qCfg.shadows
+        ? THREE.PCFSoftShadowMap
+        : THREE.BasicShadowMap;
 
       const scene = new THREE.Scene();
       scene.fog = new THREE.Fog("#071a12", 50, 120);
@@ -707,7 +735,11 @@ function Board3DInner({
 
       const dir = new THREE.DirectionalLight("#ffffff", 0.95);
       dir.position.set(12, 16, 10);
-      dir.castShadow = true;
+      dir.castShadow = qCfg.shadows;
+      if (qCfg.shadows) {
+        dir.shadow.mapSize.width = qCfg.shadowMapSize;
+        dir.shadow.mapSize.height = qCfg.shadowMapSize;
+      }
       scene.add(dir);
 
       const tableBase = new THREE.Mesh(
@@ -787,31 +819,36 @@ function Board3DInner({
     [updateCamera],
   );
 
-  const handleLayout = useCallback((e: any) => {
-    const { width, height } = e.nativeEvent.layout;
-    if (
-      !rendererRef.current ||
-      !cameraRef.current ||
-      width === 0 ||
-      height === 0
-    )
-      return;
+  const handleLayout = useCallback(
+    (e: any) => {
+      const { width, height } = e.nativeEvent.layout;
+      if (
+        !rendererRef.current ||
+        !cameraRef.current ||
+        width === 0 ||
+        height === 0
+      )
+        return;
 
-    const pr = Math.min(PixelRatio.get(), MAX_RENDER_PIXEL_RATIO);
-    const pw = Math.round(width * pr);
-    const ph = Math.round(height * pr);
+      const pr = Math.min(PixelRatio.get(), qCfg.maxDpr);
+      const pw = Math.round(width * pr);
+      const ph = Math.round(height * pr);
 
-    rendererRef.current.setSize(pw, ph);
+      rendererRef.current.setPixelRatio(pr);
+      rendererRef.current.setSize(pw, ph);
 
-    const gl = glRef.current;
-    if (gl) {
-      gl.viewport(0, 0, pw, ph);
-    }
+      const gl = glRef.current;
+      if (gl) {
+        gl.viewport(0, 0, pw, ph);
+      }
 
-    cameraRef.current.aspect = width / height;
-    cameraRef.current.updateProjectionMatrix();
-    cameraDirtyRef.current = true;
-  }, []);
+      cameraRef.current.aspect = width / height;
+      cameraRef.current.updateProjectionMatrix();
+      cameraDirtyRef.current = true;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [qCfg.maxDpr],
+  );
 
   const leftActive = dragOverSide === "left";
   const rightActive = dragOverSide === "right";
