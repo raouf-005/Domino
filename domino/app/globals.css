@@ -32,6 +32,10 @@ html,
 body {
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+  height: 100%;
+  /* In native fullscreen, stretch to fill the actual window */
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Safe-area insets for notched phones */

@@ -103,7 +103,7 @@ function GameBoard3DComponent({
   );
 
   const boardWrapperClassName = fullscreen
-    ? `board-wrapper relative w-screen h-dvh min-h-dvh bg-black ${containerClassName ?? ""}`
+    ? `board-fullscreen absolute inset-0 ${containerClassName ?? ""}`
     : `board-wrapper relative w-full rounded-xl sm:rounded-2xl md:rounded-3xl border border-white/10 shadow-2xl bg-gradient-to-b from-emerald-900/60 to-emerald-950/80 p-0.5 sm:p-1 md:p-2 h-[calc(100dvh-3.25rem)] sm:h-[55vh] md:h-[65vh] landscape:h-[70vh] min-h-60 sm:min-h-75 md:min-h-130 ${containerClassName ?? ""}`;
 
   return (
@@ -126,6 +126,9 @@ function GameBoard3DComponent({
           powerPreference: qualityConfig.powerPreference,
         }}
         style={{
+          width: "100%",
+          height: "100%",
+          display: "block",
           borderRadius: fullscreen ? 0 : 24,
           background: "linear-gradient(180deg,#0a2e1a 0%,#153d25 100%)",
         }}

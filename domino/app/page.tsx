@@ -1007,7 +1007,10 @@ export default function GamePage() {
 
   if (isBoardFullscreen && isActiveGamePhase && gameState) {
     return (
-      <div className="fixed inset-0 z-70 w-screen h-dvh bg-black">
+      <div
+        className="fixed inset-0 z-70 overflow-hidden"
+        style={{ background: "#000" }}
+      >
         <GameBoard3DNoSSR
           board={gameState.board}
           boardLeftEnd={gameState.boardLeftEnd}
