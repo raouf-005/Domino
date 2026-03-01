@@ -201,7 +201,11 @@ function SeatNameLabels({
   teamColors: { team1: string; team2: string };
   activeSeat?: "bottom" | "left" | "top" | "right" | null;
 }) {
+  const { size } = useThree();
   const names = { bottom, left, top, right } as const;
+
+  // Responsive scale factor: 1 at ≥900px, shrinks down to 0.45 at ~360px
+  const scale = Math.max(0.45, Math.min(1, size.width / 900));
 
   const positions: Record<"bottom" | "left" | "top" | "right", Vec3> = {
     bottom: [0, 3.2, 17.5],
@@ -209,6 +213,15 @@ function SeatNameLabels({
     left: [-17.5, 3.2, 0],
     right: [17.5, 3.2, 0],
   };
+
+  const fontSize = Math.round(36 * scale);
+  const emojiSize = Math.round(28 * scale);
+  const dotSize = Math.round(14 * scale);
+  const padV = Math.round(8 * scale);
+  const padH = Math.round(20 * scale);
+  const padDot = Math.round(16 * scale);
+  const radius = Math.round(28 * scale);
+  const borderW = Math.max(1.5, 2 * scale);
 
   return (
     <>
@@ -226,13 +239,14 @@ function SeatNameLabels({
             distanceFactor={10}
           >
             <div
-              className="flex items-center gap-2 select-none pointer-events-none whitespace-nowrap"
+              className="flex items-center select-none pointer-events-none whitespace-nowrap"
               style={{
-                padding: "8px 20px 8px 16px",
-                borderRadius: 28,
+                gap: Math.round(8 * scale),
+                padding: `${padV}px ${padH}px ${padV}px ${padDot}px`,
+                borderRadius: radius,
                 background: `linear-gradient(135deg, ${accent}30, rgba(0,0,0,0.7))`,
                 backdropFilter: "blur(10px)",
-                border: `2px solid ${accent}`,
+                border: `${borderW}px solid ${accent}`,
                 boxShadow: isActive
                   ? `0 0 20px ${accent}aa, 0 0 8px ${accent}60, inset 0 0 12px ${accent}20`
                   : `0 0 12px ${accent}50, 0 0 4px rgba(0,0,0,0.5)`,
@@ -243,8 +257,8 @@ function SeatNameLabels({
               <span
                 style={{
                   display: "inline-block",
-                  width: 14,
-                  height: 14,
+                  width: dotSize,
+                  height: dotSize,
                   borderRadius: "50%",
                   background: accent,
                   boxShadow: `0 0 8px ${accent}, 0 0 3px ${accent}`,
@@ -254,7 +268,7 @@ function SeatNameLabels({
               <span
                 style={{
                   color: "#fff",
-                  fontSize: 36,
+                  fontSize,
                   fontWeight: 700,
                   letterSpacing: 0.5,
                   textShadow: `0 0 8px ${accent}80, 0 2px 4px rgba(0,0,0,0.6)`,
@@ -265,8 +279,8 @@ function SeatNameLabels({
               {isActive && (
                 <span
                   style={{
-                    fontSize: 28,
-                    marginLeft: 4,
+                    fontSize: emojiSize,
+                    marginLeft: Math.round(4 * scale),
                     filter: "drop-shadow(0 0 4px rgba(255,200,0,0.8))",
                   }}
                 >
