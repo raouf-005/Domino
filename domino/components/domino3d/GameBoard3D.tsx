@@ -167,43 +167,43 @@ function GameBoard3DComponent({
       <BoardBadge />
       <EndLabels left={boardLeftEnd} right={boardRightEnd} />
 
-      {/* Turn indicator – absolute bottom-left */}
+      {/* Turn indicator – bottom-right */}
       {isMyTurn && !revealAllHands && (
-        <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 z-10 flex items-center gap-2">
+        <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 z-10 flex items-center gap-1.5">
           <span
-            className="animate-pulse inline-flex items-center gap-1.5 select-none"
+            className="animate-pulse inline-flex items-center gap-1 select-none"
             style={{
-              padding: "6px 14px",
-              borderRadius: 16,
+              padding: "3px 8px",
+              borderRadius: 10,
               background:
                 "linear-gradient(135deg, rgba(16,185,129,0.85), rgba(5,150,105,0.75))",
               color: "#fff",
-              fontSize: 14,
+              fontSize: 10,
               fontWeight: 700,
               letterSpacing: 0.3,
               boxShadow:
-                "0 0 16px rgba(16,185,129,0.5), 0 2px 8px rgba(0,0,0,0.35)",
+                "0 0 10px rgba(16,185,129,0.5), 0 1px 4px rgba(0,0,0,0.35)",
               border: "1px solid rgba(255,255,255,0.25)",
               backdropFilter: "blur(8px)",
             }}
           >
-            <span style={{ fontSize: 15 }}>🎲</span>
+            <span style={{ fontSize: 10 }}>🎲</span>
             Your turn
           </span>
           {canPass && (
             <button
               onClick={onPass}
               style={{
-                padding: "6px 14px",
-                borderRadius: 16,
+                padding: "3px 8px",
+                borderRadius: 10,
                 background:
                   "linear-gradient(135deg, rgba(239,68,68,0.85), rgba(220,38,38,0.75))",
                 color: "#fff",
-                fontSize: 14,
+                fontSize: 10,
                 fontWeight: 700,
                 border: "1px solid rgba(255,255,255,0.25)",
                 cursor: "pointer",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
                 backdropFilter: "blur(8px)",
               }}
             >

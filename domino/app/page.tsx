@@ -15,6 +15,7 @@ import {
   ClientToServerEvents,
 } from "../lib/gameTypes";
 import { DominoTile2D, GameBoard3D } from "../components/Domino3D";
+import MinecraftChat from "../components/MinecraftChat";
 import dynamic from "next/dynamic";
 
 const GameBoard3DNoSSR = dynamic(
@@ -1037,6 +1038,15 @@ export default function GamePage() {
           fullscreen
         />
 
+        {/* Minecraft-style chat overlay */}
+        <MinecraftChat
+          messages={chatMessages}
+          onSend={(msg) => {
+            if (!socket || !gameState) return;
+            socket.emit("sendChat", { gameId: gameState.id, message: msg });
+          }}
+        />
+
         <div className="absolute top-3 right-3 z-40 flex items-center gap-2">
           <select
             value={renderQuality}
@@ -1596,7 +1606,7 @@ export default function GamePage() {
             </div>
           </motion.div>
         ) : (
-          <>
+          <div className="relative">
             {/* 3D Board with drag-and-drop hand */}
             <GameBoard3DNoSSR
               board={gameState?.board || []}
@@ -1622,7 +1632,20 @@ export default function GamePage() {
               rightPlayerName={rightPlayer?.name}
               quality={renderQuality}
             />
-          </>
+            {/* Minecraft chat for mobile (desktop uses the traditional chat below) */}
+            <div className="sm:hidden">
+              <MinecraftChat
+                messages={chatMessages}
+                onSend={(msg) => {
+                  if (!socket || !gameState) return;
+                  socket.emit("sendChat", {
+                    gameId: gameState.id,
+                    message: msg,
+                  });
+                }}
+              />
+            </div>
+          </div>
         )}
 
         {/* Chat */}
