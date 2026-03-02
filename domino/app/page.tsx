@@ -35,6 +35,38 @@ const GameBoard3DNoSSR = dynamic(
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 type RenderQuality = "low" | "medium" | "high";
+type AnimationIntensity = "off" | "minimal" | "full";
+
+interface WebSettings {
+  winSlamAnimation: boolean;
+  confettiAnimation: boolean;
+  screenShake: boolean;
+  dominoTrails: boolean;
+  victoryFireworks: boolean;
+  funnyEmojis: boolean;
+  hapticFeedback: boolean;
+  animationIntensity: AnimationIntensity;
+  renderQuality: RenderQuality;
+  reducedMotion: boolean;
+  soundEnabled: boolean;
+  soundVolume: number;
+}
+
+const DEFAULT_SETTINGS: WebSettings = {
+  winSlamAnimation: true,
+  confettiAnimation: true,
+  screenShake: true,
+  dominoTrails: true,
+  victoryFireworks: true,
+  funnyEmojis: true,
+  hapticFeedback: true,
+  animationIntensity: "full",
+  renderQuality: "medium",
+  reducedMotion: false,
+  soundEnabled: true,
+  soundVolume: 0.7,
+};
+const SETTINGS_STORAGE_KEY = "domino_web_settings";
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL?.trim();
 
@@ -419,6 +451,232 @@ function GameBoard({
   );
 }
 
+function SettingsToggle({
+  label,
+  description,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label
+      className={`flex items-center justify-between gap-4 rounded-xl border p-3 ${
+        disabled
+          ? "opacity-50 border-white/5 bg-white/3"
+          : "border-white/10 bg-white/5"
+      }`}
+    >
+      <div>
+        <p className="text-white font-semibold text-sm">{label}</p>
+        <p className="text-white/50 text-xs">{description}</p>
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 accent-emerald-400"
+      />
+    </label>
+  );
+}
+
+function WebSettingsPanel({
+  settings,
+  onClose,
+  onReset,
+  onUpdate,
+}: {
+  settings: WebSettings;
+  onClose: () => void;
+  onReset: () => void;
+  onUpdate: <K extends keyof WebSettings>(
+    key: K,
+    value: WebSettings[K],
+  ) => void;
+}) {
+  const reduced = settings.reducedMotion;
+  return (
+    <div className="min-h-screen relative overflow-hidden safe-area-pad">
+      <AnimatedBackground />
+      <div className="relative z-10 max-w-4xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+        <div className="rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <button
+              onClick={onClose}
+              className="px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm"
+            >
+              ← Back
+            </button>
+            <h2 className="text-white text-lg sm:text-2xl font-bold">
+              ⚙️ Settings
+            </h2>
+            <button
+              onClick={onReset}
+              className="px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/20 text-red-200 text-sm"
+            >
+              Reset
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            <section className="space-y-2">
+              <h3 className="text-white font-bold">🎬 Animations</h3>
+              <SettingsToggle
+                label="Win Slam"
+                description="Hand slams the board when you win"
+                checked={settings.winSlamAnimation}
+                disabled={reduced}
+                onChange={(v) => onUpdate("winSlamAnimation", v)}
+              />
+              <SettingsToggle
+                label="Confetti"
+                description="Confetti burst on victory"
+                checked={settings.confettiAnimation}
+                disabled={reduced}
+                onChange={(v) => onUpdate("confettiAnimation", v)}
+              />
+              <SettingsToggle
+                label="Fireworks"
+                description="Fireworks explosion on win"
+                checked={settings.victoryFireworks}
+                disabled={reduced}
+                onChange={(v) => onUpdate("victoryFireworks", v)}
+              />
+              <SettingsToggle
+                label="Screen Shake"
+                description="Shake on big plays"
+                checked={settings.screenShake}
+                disabled={reduced}
+                onChange={(v) => onUpdate("screenShake", v)}
+              />
+              <SettingsToggle
+                label="Domino Trails"
+                description="Particle trail when dragging tiles"
+                checked={settings.dominoTrails}
+                disabled={reduced}
+                onChange={(v) => onUpdate("dominoTrails", v)}
+              />
+              <SettingsToggle
+                label="Funny Emojis"
+                description="Emoji rain and reactions"
+                checked={settings.funnyEmojis}
+                disabled={reduced}
+                onChange={(v) => onUpdate("funnyEmojis", v)}
+              />
+              <SettingsToggle
+                label="Haptic Feedback"
+                description="Vibration-like feedback (when supported)"
+                checked={settings.hapticFeedback}
+                disabled={reduced}
+                onChange={(v) => onUpdate("hapticFeedback", v)}
+              />
+
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-white/90 text-sm font-semibold mb-2">
+                  Animation Intensity
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["off", "minimal", "full"] as AnimationIntensity[]).map(
+                    (mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => onUpdate("animationIntensity", mode)}
+                        className={`rounded-lg px-3 py-2 text-sm font-semibold capitalize border ${
+                          settings.animationIntensity === mode
+                            ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-200"
+                            : "bg-white/5 border-white/10 text-white/70"
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-white font-bold">⚡ Quality & Performance</h3>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-white/90 text-sm font-semibold mb-2">
+                  Render Quality
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["low", "medium", "high"] as RenderQuality[]).map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => onUpdate("renderQuality", q)}
+                      className={`rounded-lg px-3 py-2 text-sm font-semibold capitalize border ${
+                        settings.renderQuality === q
+                          ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-200"
+                          : "bg-white/5 border-white/10 text-white/70"
+                      }`}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <SettingsToggle
+                label="Reduced Motion"
+                description="Disable all major animations"
+                checked={settings.reducedMotion}
+                onChange={(v) => onUpdate("reducedMotion", v)}
+              />
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-white font-bold">🔊 Sound</h3>
+              <SettingsToggle
+                label="Sound Effects"
+                description="Play sounds on actions"
+                checked={settings.soundEnabled}
+                onChange={(v) => onUpdate("soundEnabled", v)}
+              />
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-white/90 text-sm font-semibold">Volume</p>
+                  <p className="text-white/60 text-xs">
+                    {Math.round(settings.soundVolume * 100)}%
+                  </p>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={settings.soundVolume}
+                  onChange={(e) =>
+                    onUpdate("soundVolume", Number(e.target.value))
+                  }
+                  className="w-full accent-emerald-400"
+                />
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-white/10 bg-white/5 p-3 text-center">
+              <h3 className="text-white font-bold">ℹ️ About</h3>
+              <p className="text-emerald-300 text-sm font-semibold mt-1">
+                Domino WMS v1.0.0
+              </p>
+              <p className="text-white/50 text-xs mt-1">
+                Multiplayer domino game with 3D visuals.
+              </p>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Main game page
 export default function GamePage() {
   const [socket, setSocket] = useState<GameSocket | null>(null);
@@ -443,9 +701,69 @@ export default function GamePage() {
     typeof window !== "undefined" ? getWebDeviceMetadata() : {},
   );
   const [reconnecting, setReconnecting] = useState(false);
-  const [renderQuality, setRenderQuality] = useState<RenderQuality>("medium");
+  const [settings, setSettings] = useState<WebSettings>(DEFAULT_SETTINGS);
+  const [showSettings, setShowSettings] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isBoardFullscreen, setIsBoardFullscreen] = useState(false);
+
+  const updateSetting = useCallback(
+    <K extends keyof WebSettings>(key: K, value: WebSettings[K]) => {
+      setSettings((prev) => {
+        const next = { ...prev, [key]: value };
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(
+            SETTINGS_STORAGE_KEY,
+            JSON.stringify(next),
+          );
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const resetSettings = useCallback(() => {
+    setSettings(DEFAULT_SETTINGS);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        SETTINGS_STORAGE_KEY,
+        JSON.stringify(DEFAULT_SETTINGS),
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<WebSettings>;
+      setSettings((prev) => ({ ...prev, ...parsed }));
+    } catch {
+      // ignore invalid local storage payload
+    }
+  }, []);
+
+  // ── Hand-slam animation: keep board mounted after game finishes ──
+  const [gameJustFinished, setGameJustFinished] = useState(false);
+  const prevGamePhaseRef = useRef<string | undefined>(undefined);
+  const slamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const phase = gameState?.gamePhase;
+    if (phase === "finished" && prevGamePhaseRef.current !== "finished") {
+      // Game just ended – keep the 3D board visible for the slam animation
+      setGameJustFinished(true);
+      slamTimerRef.current = setTimeout(() => setGameJustFinished(false), 3500);
+    }
+    prevGamePhaseRef.current = phase;
+    return () => {
+      if (slamTimerRef.current) clearTimeout(slamTimerRef.current);
+    };
+  }, [gameState?.gamePhase]);
+
+  const gameFinished = gameState?.gamePhase === "finished";
+  const effectiveRenderQuality = settings.renderQuality;
 
   useEffect(() => {
     const newSocket: GameSocket = io(SOCKET_URL, {
@@ -722,11 +1040,28 @@ export default function GamePage() {
         : null;
   const loserPoints = loserTeam ? teamTotals[loserTeam] : null;
 
+  if (showSettings) {
+    return (
+      <WebSettingsPanel
+        settings={settings}
+        onClose={() => setShowSettings(false)}
+        onReset={resetSettings}
+        onUpdate={updateSetting}
+      />
+    );
+  }
+
   // Login/Join screen
   if (!joined) {
     return (
       <div className="min-h-screen relative  flex items-center justify-center p-2 sm:p-4">
         <AnimatedBackground />
+        <button
+          onClick={() => setShowSettings(true)}
+          className="absolute top-4 right-4 z-30 px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-white/90 text-sm font-semibold"
+        >
+          ⚙️ Settings
+        </button>
 
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -958,7 +1293,10 @@ export default function GamePage() {
   const isActiveGamePhase =
     gameState?.gamePhase !== "waiting" && gameState?.gamePhase !== "finished";
 
-  if (isMobileViewport && isActiveGamePhase && gameState) {
+  // Keep the 3D board mounted while the slam animation plays
+  const showBoardPhase = isActiveGamePhase || gameJustFinished;
+
+  if (isMobileViewport && showBoardPhase && gameState) {
     return (
       <div className="fixed inset-0 w-screen h-dvh bg-black">
         <GameBoard3DNoSSR
@@ -983,30 +1321,50 @@ export default function GamePage() {
           leftPlayerName={leftPlayer?.name}
           topPlayerName={topPlayer?.name}
           rightPlayerName={rightPlayer?.name}
-          quality={renderQuality}
+          quality={effectiveRenderQuality}
+          gameFinished={gameFinished}
+          blockedEnd={isBlockedEnd}
+          winSlamEnabled={
+            settings.winSlamAnimation &&
+            !settings.reducedMotion &&
+            settings.animationIntensity !== "off"
+          }
+          screenShakeEnabled={
+            settings.screenShake &&
+            !settings.reducedMotion &&
+            settings.animationIntensity !== "off"
+          }
           fullscreen
         />
 
-        <div className="absolute top-3 right-3 z-40">
+        <div className="absolute top-3 right-3 z-40 flex items-center gap-2">
           <label className="sr-only" htmlFor="quality-mobile">
             3D quality
           </label>
           <select
             id="quality-mobile"
-            value={renderQuality}
-            onChange={(e) => setRenderQuality(e.target.value as RenderQuality)}
+            value={effectiveRenderQuality}
+            onChange={(e) =>
+              updateSetting("renderQuality", e.target.value as RenderQuality)
+            }
             className="bg-black/55 border border-white/20 text-white [&_option]:bg-black/55 [&_option]:text-white   text-xs rounded-lg px-2 py-1 outline-none"
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
           </select>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="px-2 py-1 rounded-lg bg-black/55 border border-white/20 text-white text-xs"
+          >
+            ⚙️
+          </button>
         </div>
       </div>
     );
   }
 
-  if (isBoardFullscreen && isActiveGamePhase && gameState) {
+  if (isBoardFullscreen && showBoardPhase && gameState) {
     return (
       <div
         className="fixed inset-0 z-70 overflow-hidden"
@@ -1034,7 +1392,19 @@ export default function GamePage() {
           leftPlayerName={leftPlayer?.name}
           topPlayerName={topPlayer?.name}
           rightPlayerName={rightPlayer?.name}
-          quality={renderQuality}
+          quality={effectiveRenderQuality}
+          gameFinished={gameFinished}
+          blockedEnd={isBlockedEnd}
+          winSlamEnabled={
+            settings.winSlamAnimation &&
+            !settings.reducedMotion &&
+            settings.animationIntensity !== "off"
+          }
+          screenShakeEnabled={
+            settings.screenShake &&
+            !settings.reducedMotion &&
+            settings.animationIntensity !== "off"
+          }
           fullscreen
         />
 
@@ -1049,8 +1419,10 @@ export default function GamePage() {
 
         <div className="absolute top-3 right-3 z-40 flex items-center gap-2">
           <select
-            value={renderQuality}
-            onChange={(e) => setRenderQuality(e.target.value as RenderQuality)}
+            value={effectiveRenderQuality}
+            onChange={(e) =>
+              updateSetting("renderQuality", e.target.value as RenderQuality)
+            }
             className="bg-black/55 border border-white/20 text-white text-xs rounded-lg px-2 py-1 outline-none"
             title="3D quality"
           >
@@ -1058,6 +1430,13 @@ export default function GamePage() {
             <option value="medium">Medium</option>
             <option value="high">High</option>
           </select>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="px-2 py-1 rounded-lg bg-black/55 border border-white/20 text-white text-xs"
+            title="Settings"
+          >
+            ⚙️
+          </button>
 
           <button
             onClick={exitBoardFullscreen}
@@ -1215,9 +1594,9 @@ export default function GamePage() {
 
           <div className="header-actions hidden sm:flex items-center gap-2">
             <select
-              value={renderQuality}
+              value={effectiveRenderQuality}
               onChange={(e) =>
-                setRenderQuality(e.target.value as RenderQuality)
+                updateSetting("renderQuality", e.target.value as RenderQuality)
               }
               className="px-2 py-2 rounded-xl bg-white/5 text-white/80 border border-white/10 text-sm"
               title="3D Quality"
@@ -1226,6 +1605,13 @@ export default function GamePage() {
               <option value="medium">Quality: Medium</option>
               <option value="high">Quality: High</option>
             </select>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/5 text-white/80 hover:bg-white/10 hover:text-white border border-white/10 transition-all font-semibold text-xs sm:text-sm"
+              title="Settings"
+            >
+              ⚙️ Settings
+            </button>
             <button
               onClick={enterBoardFullscreen}
               className="px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/5 text-white/80 hover:bg-white/10 hover:text-white border border-white/10 transition-all font-semibold text-xs sm:text-sm"
@@ -1275,9 +1661,9 @@ export default function GamePage() {
           )}
           <div className="flex items-center gap-1">
             <select
-              value={renderQuality}
+              value={effectiveRenderQuality}
               onChange={(e) =>
-                setRenderQuality(e.target.value as RenderQuality)
+                updateSetting("renderQuality", e.target.value as RenderQuality)
               }
               className="p-1 rounded bg-white/10 text-[10px] text-white"
               title="3D quality"
@@ -1286,6 +1672,13 @@ export default function GamePage() {
               <option value="medium">M</option>
               <option value="high">H</option>
             </select>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-1 rounded bg-white/10 text-[10px]"
+              title="Settings"
+            >
+              ⚙️
+            </button>
             <button
               onClick={copyRoomCode}
               className="p-1 rounded bg-white/10 text-[10px]"
@@ -1462,7 +1855,19 @@ export default function GamePage() {
               leftPlayerName={leftPlayer?.name}
               topPlayerName={topPlayer?.name}
               rightPlayerName={rightPlayer?.name}
-              quality={renderQuality}
+              quality={effectiveRenderQuality}
+              gameFinished={gameFinished}
+              blockedEnd={isBlockedEnd}
+              winSlamEnabled={
+                settings.winSlamAnimation &&
+                !settings.reducedMotion &&
+                settings.animationIntensity !== "off"
+              }
+              screenShakeEnabled={
+                settings.screenShake &&
+                !settings.reducedMotion &&
+                settings.animationIntensity !== "off"
+              }
             />
             <div className="mt-3 sm:mt-6 bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/10">
               <h3 className="text-lg sm:text-2xl font-bold text-white mb-1 sm:mb-2">
@@ -1630,7 +2035,19 @@ export default function GamePage() {
               leftPlayerName={leftPlayer?.name}
               topPlayerName={topPlayer?.name}
               rightPlayerName={rightPlayer?.name}
-              quality={renderQuality}
+              quality={effectiveRenderQuality}
+              gameFinished={gameFinished}
+              blockedEnd={isBlockedEnd}
+              winSlamEnabled={
+                settings.winSlamAnimation &&
+                !settings.reducedMotion &&
+                settings.animationIntensity !== "off"
+              }
+              screenShakeEnabled={
+                settings.screenShake &&
+                !settings.reducedMotion &&
+                settings.animationIntensity !== "off"
+              }
             />
             {/* Minecraft chat for mobile (desktop uses the traditional chat below) */}
             <div className="sm:hidden">

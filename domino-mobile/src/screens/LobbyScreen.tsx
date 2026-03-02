@@ -222,7 +222,11 @@ function PlayerSlot({
   );
 }
 
-export default function LobbyScreen() {
+interface LobbyProps {
+  onOpenSettings?: () => void;
+}
+
+export default function LobbyScreen({ onOpenSettings }: LobbyProps) {
   const { gameState, startGame, autoFillAI, copyRoomCode, leaveMatch, socket } =
     useGame();
 
@@ -365,6 +369,14 @@ export default function LobbyScreen() {
               🚪 Leave
             </Text>
           </TouchableOpacity>
+          {onOpenSettings && (
+            <TouchableOpacity
+              onPress={onOpenSettings}
+              style={[styles.bottomBtn, styles.settingsBtn]}
+            >
+              <Text style={styles.bottomBtnText}>⚙️ Settings</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </ScrollView>
     </LinearGradient>
@@ -736,5 +748,9 @@ const styles = StyleSheet.create({
   leaveBtn: {
     borderColor: "rgba(239,68,68,0.2)",
     backgroundColor: "rgba(239,68,68,0.06)",
+  },
+  settingsBtn: {
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
 });

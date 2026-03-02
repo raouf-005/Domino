@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-} from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 interface ChatMessage {
   playerName: string;
@@ -41,7 +35,6 @@ export default function MinecraftChat({
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevLenRef = useRef(messages.length);
-  const now = Date.now();
 
   // Track new incoming messages and assign timestamps
   useEffect(() => {
@@ -74,7 +67,6 @@ export default function MinecraftChat({
   // Global key listener: press T or Enter to open chat (like Minecraft)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      // Don't capture if user is already in an input/textarea
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
@@ -101,13 +93,10 @@ export default function MinecraftChat({
     setIsOpen(false);
   }, [inputValue, onSend]);
 
-  // Determine which messages are "fresh" (recently sent)
   const visibleMessages = useMemo(() => {
-    const recent = timedMessages.slice(-maxVisible);
-    return recent;
+    return timedMessages.slice(-maxVisible);
   }, [timedMessages, maxVisible]);
 
-  // Force re-render to update fade states
   const [, setTick] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 500);
@@ -118,25 +107,22 @@ export default function MinecraftChat({
 
   return (
     <div
-      className="absolute bottom-2 left-2 z-30 flex flex-col pointer-events-none"
-      style={{ maxWidth: "min(400px, 55vw)" }}
+      className="absolute bottom-2 left-2 z-30 flex flex-col pointer-events-none sm:bottom-4 sm:left-4 lg:bottom-6 lg:left-6"
+      style={{ maxWidth: "min(90vw, 500px)" }}
     >
-      {/* Message log */}
       <div
         ref={scrollRef}
         className="flex flex-col gap-0.5 mb-1 overflow-hidden"
-        style={{ maxHeight: isOpen ? 200 : 140 }}
+        style={{ maxHeight: isOpen ? "min(200px, 40vh)" : "min(140px, 30vh)" }}
       >
         {visibleMessages.map((msg) => {
           const age = currentTime - msg.timestamp;
-          // When chat is open, show all messages fully; otherwise fade after fadeDelay
           let opacity: number;
           if (isOpen) {
             opacity = 0.9;
           } else if (age < fadeDelay) {
             opacity = 0.9;
           } else if (age < fadeDelay + 2000) {
-            // Fade out over 2 seconds
             opacity = 0.9 * (1 - (age - fadeDelay) / 2000);
           } else {
             opacity = 0;
@@ -159,20 +145,18 @@ export default function MinecraftChat({
               <span
                 style={{
                   color: "#5ef",
-                  fontSize: 12,
+                  fontSize: "clamp(10px, 2vw, 12px)",
                   fontWeight: 700,
                   fontFamily: "'Geist', monospace",
                   textShadow: "0 1px 3px rgba(0,0,0,0.9)",
                 }}
               >
-                {"<"}
-                {msg.playerName}
-                {">"}{" "}
+                &lt;{msg.playerName}&gt;{" "}
               </span>
               <span
                 style={{
                   color: "#fff",
-                  fontSize: 12,
+                  fontSize: "clamp(10px, 2vw, 12px)",
                   fontFamily: "'Geist', sans-serif",
                   textShadow: "0 1px 3px rgba(0,0,0,0.9)",
                 }}
@@ -184,7 +168,6 @@ export default function MinecraftChat({
         })}
       </div>
 
-      {/* Input row */}
       {isOpen ? (
         <div
           className="flex gap-1 pointer-events-auto"
@@ -209,7 +192,6 @@ export default function MinecraftChat({
                 setIsOpen(false);
                 setInputValue("");
               }
-              // Stop propagation so game keys (e.g. T) don't trigger while typing
               e.stopPropagation();
             }}
             placeholder="Type a message..."
@@ -217,7 +199,7 @@ export default function MinecraftChat({
             className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/40 px-2 py-1"
             style={{
               fontFamily: "'Geist', sans-serif",
-              fontSize: 12,
+              fontSize: "clamp(11px, 2vw, 12px)",
               caretColor: "#5ef",
             }}
           />
@@ -230,7 +212,6 @@ export default function MinecraftChat({
           </button>
         </div>
       ) : (
-        /* Chat toggle button – very subtle when idle */
         <button
           onClick={() => setIsOpen(true)}
           className="pointer-events-auto self-start"
@@ -240,9 +221,9 @@ export default function MinecraftChat({
             background: "rgba(0,0,0,0.35)",
             border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 6,
-            padding: "3px 10px",
+            padding: "clamp(8px, 2vw, 11px) clamp(20px, 4vw, 26px)",
             color: "#fff",
-            fontSize: 11,
+            fontSize: "clamp(14px, 3vw, 18px)",
             fontFamily: "'Geist', sans-serif",
             cursor: "pointer",
           }}

@@ -20,7 +20,7 @@
  * at the edge of a domino table and looking down.
  */
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
   ScrollView,
@@ -40,7 +40,9 @@ import Board3D, { type RenderQuality } from "../components/Board3D";
 import DominoTile3D from "../components/DominoTile3D";
 import DraggableHandTile from "../components/DraggableHandTile";
 import OpponentCard from "../components/OpponentCard";
+import { WinCelebration } from "../components/WinAnimations";
 import { useGame } from "../context/GameContext";
+import { useSettings } from "../context/SettingsContext";
 import { Colors } from "../theme/colors";
 import { Domino } from "../types/gameTypes";
 
@@ -57,7 +59,11 @@ const STATUS_BAR_H =
 // ================================================================
 // ---- MAIN GAME SCREEN ----
 // ================================================================
-export default function GameScreen() {
+interface GameScreenProps {
+  onOpenSettings?: () => void;
+}
+
+export default function GameScreen({ onOpenSettings }: GameScreenProps) {
   const {
     gameState,
     socket,
@@ -74,14 +80,64 @@ export default function GameScreen() {
     toast,
   } = useGame();
 
+  const { settings } = useSettings();
+
   const { width: W, height: H } = useWindowDimensions();
   const isLandscape = W > H;
   const hudTop = isLandscape ? 4 : STATUS_BAR_H;
   const handPad = isLandscape ? 8 : H < 700 ? 14 : 22;
 
+  // Responsive scale factors
+  const scale = Math.min(W / 390, H / 844); // base iPhone 14 dimensions
+  const turnFontSize = Math.max(11, Math.min(16, 13 * scale));
+  const turnDotSize = Math.max(6, Math.min(10, 8 * scale));
+  const turnPadV = Math.max(2, Math.min(6, 4 * scale));
+  const passFontSize = Math.max(11, Math.min(16, 13 * scale));
+  const passPadH = Math.max(16, Math.min(28, 20 * scale));
+  const passPadV = Math.max(8, Math.min(14, 10 * scale));
+  const passBottom = Math.max(90, Math.min(160, 120 * scale));
+
   // ── Fullscreen & quality state (like web version) ──
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [renderQuality, setRenderQuality] = useState<RenderQuality>("medium");
+  const [renderQuality, setRenderQuality] = useState<RenderQuality>(
+    settings.renderQuality ?? "medium",
+  );
+
+  // Sync quality from settings
+  useEffect(() => {
+    setRenderQuality(settings.renderQuality);
+  }, [settings.renderQuality]);
+
+  // ── Win celebration state ──
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationDone, setCelebrationDone] = useState(false);
+  const prevPhaseRef = useRef(gameState?.gamePhase);
+
+  useEffect(() => {
+    if (
+      prevPhaseRef.current === "playing" &&
+      gameState?.gamePhase === "finished" &&
+      !settings.reducedMotion &&
+      settings.animationIntensity !== "off"
+    ) {
+      // Game just ended — show celebration overlay
+      setShowCelebration(true);
+      setCelebrationDone(false);
+
+      // Auto-dismiss after 3.5s
+      const timer = setTimeout(() => {
+        setCelebrationDone(true);
+        setShowCelebration(false);
+      }, 3500);
+
+      return () => clearTimeout(timer);
+    }
+    prevPhaseRef.current = gameState?.gamePhase;
+  }, [
+    gameState?.gamePhase,
+    settings.reducedMotion,
+    settings.animationIntensity,
+  ]);
 
   // Force-remount GLView on orientation change to fix canvas sizing
   const [glKey, setGlKey] = useState(0);
@@ -163,11 +219,34 @@ export default function GameScreen() {
   // ---- FINISHED STATE ----
   // ================================================================
   if (gameState.gamePhase === "finished") {
+    const myTeam = currentPlayer?.team;
+    const iWon = myTeam ? gameState.winner === myTeam : false;
+    const winTeamColor =
+      gameState.winner === "team1"
+        ? Colors.team1
+        : gameState.winner === "team2"
+          ? Colors.team2
+          : Colors.amber;
+
     return (
       <LinearGradient
         colors={["#060f1d", "#0a192f", "#0f2e2e", "#1a1a2e"]}
         style={styles.container}
       >
+        {/* Win / Loss celebration overlay */}
+        <WinCelebration
+          active={showCelebration}
+          won={iWon}
+          isBlocked={isBlockedEnd}
+          teamColor={winTeamColor}
+          lastDomino={
+            gameState.board.length > 0
+              ? gameState.board[gameState.board.length - 1]
+              : null
+          }
+          onSlamComplete={() => {}}
+        />
+
         <ScrollView
           contentContainerStyle={[
             styles.finishedScroll,
@@ -338,7 +417,7 @@ export default function GameScreen() {
         pointerEvents="none"
       />
       <View style={[styles.handContent, { paddingBottom: handPad }]}>
-        {/* Hand header with tile count + pass button */}
+        {/* Hand header with tile count */}
         <View style={styles.handHeader}>
           <View style={styles.handLabelRow}>
             <Text style={styles.handLabel}>
@@ -346,16 +425,6 @@ export default function GameScreen() {
             </Text>
             <Text style={styles.handSubLabel}> tiles</Text>
           </View>
-          {canPass && isMyTurn && (
-            <TouchableOpacity onPress={pass} activeOpacity={0.7}>
-              <LinearGradient
-                colors={["rgba(245,158,11,0.15)", "rgba(245,158,11,0.05)"]}
-                style={styles.passBtn}
-              >
-                <Text style={styles.passBtnText}>Pass ⏭</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Draggable tiles */}
@@ -557,14 +626,23 @@ export default function GameScreen() {
         <TouchableOpacity onPress={leaveMatch} style={styles.exitBtn}>
           <Text style={styles.exitBtnText}>✕</Text>
         </TouchableOpacity>
+        {/* Settings */}
+        {onOpenSettings && (
+          <TouchableOpacity onPress={onOpenSettings} style={styles.gearBtn}>
+            <Text style={styles.gearBtnText}>⚙️</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Turn indicator */}
-      <View style={styles.turnStrip}>
+      <View style={[styles.turnStrip, { paddingVertical: turnPadV }]}>
         <View
           style={[
             styles.turnDot,
             {
+              width: turnDotSize,
+              height: turnDotSize,
+              borderRadius: turnDotSize / 2,
               backgroundColor:
                 currentTurn?.team === "team1" ? Colors.team1 : Colors.team2,
             },
@@ -573,6 +651,7 @@ export default function GameScreen() {
         <Text
           style={[
             styles.turnText,
+            { fontSize: turnFontSize },
             isMyTurn && { color: Colors.amber, fontWeight: "800" },
           ]}
           numberOfLines={1}
@@ -608,6 +687,28 @@ export default function GameScreen() {
         </View>
         {handContent}
       </>
+
+      {/* ── Floating Pass button — bottom center ── */}
+      {canPass && isMyTurn && (
+        <View style={[styles.passFloatWrap, { bottom: passBottom }]}>
+          <TouchableOpacity onPress={pass} activeOpacity={0.7}>
+            <LinearGradient
+              colors={["rgba(245,158,11,0.22)", "rgba(245,158,11,0.08)"]}
+              style={[
+                styles.passFloatBtn,
+                {
+                  paddingHorizontal: passPadH,
+                  paddingVertical: passPadV,
+                },
+              ]}
+            >
+              <Text style={[styles.passFloatText, { fontSize: passFontSize }]}>
+                Pass ⏭
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Floating toolbar: fullscreen + quality + rotate ── */}
       <View style={styles.floatingToolbar}>
@@ -762,6 +863,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   exitBtnText: { color: "#fca5a5", fontWeight: "700", fontSize: 13 },
+  gearBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
+  },
+  gearBtnText: { fontSize: 18 },
 
   // ── Turn strip ──
   turnStrip: {
@@ -850,6 +963,31 @@ const styles = StyleSheet.create({
     borderColor: "rgba(245,158,11,0.25)",
   },
   passBtnText: { color: Colors.amber, fontWeight: "700", fontSize: 11 },
+
+  // ── Floating pass button (bottom center) ──
+  passFloatWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 998,
+  },
+  passFloatBtn: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.35)",
+    shadowColor: "#f59e0b",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  passFloatText: {
+    color: Colors.amber,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
   handTiles: {
     flexDirection: "row",
     flexWrap: "wrap",

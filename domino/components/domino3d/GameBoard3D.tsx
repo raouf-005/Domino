@@ -38,6 +38,10 @@ export interface GameBoard3DProps {
   quality?: RenderQuality;
   containerClassName?: string;
   fullscreen?: boolean;
+  gameFinished?: boolean;
+  blockedEnd?: boolean;
+  winSlamEnabled?: boolean;
+  screenShakeEnabled?: boolean;
 }
 
 function GameBoard3DComponent({
@@ -69,6 +73,10 @@ function GameBoard3DComponent({
   quality = "medium",
   containerClassName,
   fullscreen = false,
+  gameFinished = false,
+  blockedEnd = false,
+  winSlamEnabled = true,
+  screenShakeEnabled = true,
 }: GameBoard3DProps) {
   const qualityConfig =
     quality === "low"
@@ -159,6 +167,10 @@ function GameBoard3DComponent({
             leftPlayerName={leftPlayerName}
             topPlayerName={topPlayerName}
             rightPlayerName={rightPlayerName}
+            gameFinished={gameFinished}
+            blockedEnd={blockedEnd}
+            winSlamEnabled={winSlamEnabled}
+            screenShakeEnabled={screenShakeEnabled}
           />
         </Suspense>
       </Canvas>
@@ -187,14 +199,14 @@ function GameBoard3DComponent({
               backdropFilter: "blur(8px)",
             }}
           >
-            <span style={{ fontSize: 10 }}>🎲</span>
+            <span style={{ fontSize: 18 }}>🎲</span>
             Your turn
           </span>
           {canPass && (
             <button
               onClick={onPass}
               style={{
-                padding: "3px 8px",
+                padding: "9px 20px",
                 borderRadius: 10,
                 background:
                   "linear-gradient(135deg, rgba(239,68,68,0.85), rgba(220,38,38,0.75))",

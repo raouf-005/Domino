@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Html, OrbitControls } from "@react-three/drei";
@@ -14,6 +21,7 @@ import { Table } from "./Table";
 import { BoardDominoes } from "./BoardDominoes";
 import { DominoPiece } from "./DominoPiece";
 import { PlayerHand } from "./PlayerHand";
+import { HandSlam3D } from "./HandSlam3D";
 
 // Shared geometry + material for opponent tile backs (avoid per-mesh alloc)
 const TILE_BOX = new THREE.BoxGeometry(1, 2, 0.18);
@@ -48,6 +56,10 @@ export function GameScene({
   topPlayerName,
   rightPlayerName,
   snakeRowSpacing = TURN_RADIUS,
+  gameFinished = false,
+  blockedEnd = false,
+  winSlamEnabled = true,
+  screenShakeEnabled = true,
 }: {
   board: Domino[];
   hand: Domino[];
@@ -73,6 +85,10 @@ export function GameScene({
   topPlayerName?: string;
   rightPlayerName?: string;
   snakeRowSpacing?: number;
+  gameFinished?: boolean;
+  blockedEnd?: boolean;
+  winSlamEnabled?: boolean;
+  screenShakeEnabled?: boolean;
 }) {
   const teamColors = {
     team1: "#4aa3ff",
@@ -88,9 +104,66 @@ export function GameScene({
   const [anyDrag, setAnyDrag] = useState(false);
   const [dragSides, setDragSides] = useState<Side[]>([]);
   const [dragProximity, setDragProximity] = useState({ left: 0, right: 0 });
+  const [cameraShake, setCameraShake] = useState(false);
+  const [boardImpact, setBoardImpact] = useState(false);
+
+  // ── Track which seat just played the latest tile ──
+  // When board grows, the player who placed a tile is the PREVIOUS activeSeat
+  type Seat = "bottom" | "left" | "top" | "right";
+  const prevActiveSeat = useRef<Seat | null>(null);
+  const prevBoardLen = useRef(board.length);
+  const [playSeat, setPlaySeat] = useState<Seat | null>(null);
+
+  useEffect(() => {
+    if (board.length > prevBoardLen.current && prevActiveSeat.current) {
+      // Board just grew — the previous active seat is who placed it
+      setPlaySeat(prevActiveSeat.current);
+    }
+    prevBoardLen.current = board.length;
+  }, [board.length]);
+
+  useEffect(() => {
+    prevActiveSeat.current = activeSeat;
+  }, [activeSeat]);
+
+  // Trigger slam once per finished cycle (including blocked endings)
+  const slamTriggeredRef = useRef(false);
+  const [showSlam, setShowSlam] = useState(false);
+  // Remember the last tile on the board when the game finishes
+  const lastTileRef = useRef<Domino | null>(null);
+  const lastTilePosRef = useRef<Vec3>([0, 0.1, 0]);
   const { items, leftDrop, rightDrop, bounds } = useSnakeLayout(board, {
     rowSpacing: snakeRowSpacing,
   });
+
+  useEffect(() => {
+    if (!gameFinished) {
+      slamTriggeredRef.current = false;
+      setShowSlam(false);
+      return;
+    }
+
+    if (blockedEnd) {
+      // Blocked game: no slam animation at all
+      setShowSlam(false);
+      slamTriggeredRef.current = true;
+      return;
+    }
+
+    if (!slamTriggeredRef.current) {
+      lastTileRef.current = board.length > 0 ? board[board.length - 1] : null;
+      if (items.length > 0) {
+        const lastLayout = items[items.length - 1];
+        lastTilePosRef.current = [
+          lastLayout.pos[0],
+          lastLayout.pos[1],
+          lastLayout.pos[2],
+        ];
+      }
+      setShowSlam(winSlamEnabled);
+      slamTriggeredRef.current = true;
+    }
+  }, [gameFinished, blockedEnd, board, winSlamEnabled, items]);
 
   const onDrag = useCallback(
     (
@@ -111,57 +184,74 @@ export function GameScene({
   return (
     <>
       <Lighting />
-      <Table />
-      {revealAllHands ? (
-        <HandTiles3D
-          top={revealTopHand}
-          left={revealLeftHand}
-          right={revealRightHand}
-          bottom={hand}
+      {/* Scene impact shake: board + nearby environment react to slam */}
+      <BoardImpactShake
+        active={boardImpact}
+        onDone={() => setBoardImpact(false)}
+      >
+        <Table />
+        {revealAllHands ? (
+          <HandTiles3D
+            top={revealTopHand}
+            left={revealLeftHand}
+            right={revealRightHand}
+            bottom={hand}
+            seatTeams={seatTeams}
+            teamColors={teamColors}
+          />
+        ) : (
+          <HandStacks3D
+            top={topHandCount}
+            left={leftHandCount}
+            right={rightHandCount}
+          />
+        )}
+        <TeamSeatGlows seatTeams={seatTeams} teamColors={teamColors} />
+        <SeatNameLabels
+          bottom={bottomPlayerName}
+          left={leftPlayerName}
+          top={topPlayerName}
+          right={rightPlayerName}
           seatTeams={seatTeams}
           teamColors={teamColors}
+          activeSeat={activeSeat}
         />
-      ) : (
-        <HandStacks3D
-          top={topHandCount}
-          left={leftHandCount}
-          right={rightHandCount}
-        />
-      )}
-      <TeamSeatGlows seatTeams={seatTeams} teamColors={teamColors} />
-      <SeatNameLabels
-        bottom={bottomPlayerName}
-        left={leftPlayerName}
-        top={topPlayerName}
-        right={rightPlayerName}
-        seatTeams={seatTeams}
-        teamColors={teamColors}
-        activeSeat={activeSeat}
+        <TurnSeatMarker seat={activeSeat} />
+        {!revealAllHands && (
+          <DropZoneGlow
+            leftDrop={lDrop}
+            rightDrop={rDrop}
+            myTurn={isMyTurn}
+            dragSides={dragSides}
+            dragging={anyDrag}
+            proximity={dragProximity}
+            boardCount={board.length}
+          />
+        )}
+        <BoardDominoes board={board} items={items} playSeat={playSeat} />
+        {!revealAllHands && (
+          <PlayerHand
+            hand={hand}
+            myTurn={isMyTurn}
+            sides={getPlayableSidesAction}
+            onPlay={onPlayAction}
+            onDrag={onDrag}
+            leftDrop={lDrop}
+            rightDrop={rDrop}
+          />
+        )}
+      </BoardImpactShake>
+      {/* Hand slam animation on game end */}
+      <HandSlam3D
+        active={showSlam && winSlamEnabled && !blockedEnd}
+        onShakeAction={() => {
+          if (screenShakeEnabled) setCameraShake(true);
+        }}
+        onImpactAction={() => setBoardImpact(true)}
+        lastTile={lastTileRef.current}
+        targetPos={lastTilePosRef.current}
       />
-      <TurnSeatMarker seat={activeSeat} />
-      {!revealAllHands && (
-        <DropZoneGlow
-          leftDrop={lDrop}
-          rightDrop={rDrop}
-          myTurn={isMyTurn}
-          dragSides={dragSides}
-          dragging={anyDrag}
-          proximity={dragProximity}
-          boardCount={board.length}
-        />
-      )}
-      {!revealAllHands && <BoardDominoes board={board} items={items} />}
-      {!revealAllHands && (
-        <PlayerHand
-          hand={hand}
-          myTurn={isMyTurn}
-          sides={getPlayableSidesAction}
-          onPlay={onPlayAction}
-          onDrag={onDrag}
-          leftDrop={lDrop}
-          rightDrop={rDrop}
-        />
-      )}
+      <CameraShake active={cameraShake} onDone={() => setCameraShake(false)} />
       <CameraAutoFit bounds={bounds} boardCount={board.length} />
       <OrbitControls
         enabled={!anyDrag}
@@ -464,6 +554,102 @@ function CameraAutoFit({
   }, [bounds, boardCount, camera, size]);
 
   return null;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * CameraShake: brief camera shake when the hand slams the table
+ * ──────────────────────────────────────────────────────────── */
+function CameraShake({
+  active,
+  onDone,
+}: {
+  active: boolean;
+  onDone: () => void;
+}) {
+  const elapsed = useRef(0);
+  const origPos = useRef<THREE.Vector3 | null>(null);
+  const { camera } = useThree();
+
+  useEffect(() => {
+    if (active) {
+      elapsed.current = 0;
+      origPos.current = camera.position.clone();
+    }
+  }, [active, camera]);
+
+  useFrame((_, delta) => {
+    if (!active || !origPos.current) return;
+    elapsed.current += delta;
+    const duration = 0.5; // shake lasts 0.5s
+    if (elapsed.current > duration) {
+      camera.position.copy(origPos.current);
+      origPos.current = null;
+      onDone();
+      return;
+    }
+    const intensity = 0.25 * (1 - elapsed.current / duration); // decays
+    camera.position.x = origPos.current.x + (Math.random() - 0.5) * intensity;
+    camera.position.y = origPos.current.y + (Math.random() - 0.5) * intensity;
+  });
+
+  return null;
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * BoardImpactShake: wraps board tiles in a group that jolts on slam impact.
+ * Tiles jump up, rattle sideways, and settle back down over ~0.7s.
+ * ────────────────────────────────────────────────────────────── */
+function BoardImpactShake({
+  active,
+  onDone,
+  children,
+}: {
+  active: boolean;
+  onDone: () => void;
+  children: ReactNode;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const elapsed = useRef(0);
+
+  useEffect(() => {
+    if (active) elapsed.current = 0;
+  }, [active]);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+    if (!active) {
+      // Ensure resting state
+      groupRef.current.position.set(0, 0, 0);
+      groupRef.current.rotation.set(0, 0, 0);
+      return;
+    }
+
+    elapsed.current += Math.min(delta, 0.05);
+    const duration = 0.9;
+
+    if (elapsed.current > duration) {
+      groupRef.current.position.set(0, 0, 0);
+      groupRef.current.rotation.set(0, 0, 0);
+      onDone();
+      return;
+    }
+
+    const t = elapsed.current / duration; // 0→1
+    const decay = 1 - t; // 1→0
+
+    // Jump: tiles pop up on impact, then land
+    const jumpY = Math.sin(t * Math.PI * 2) * 0.24 * decay;
+    // Rattle sideways
+    const rattleX = Math.sin(elapsed.current * 72) * 0.12 * decay;
+    const rattleZ = Math.cos(elapsed.current * 64) * 0.1 * decay;
+    // Slight rotational jitter
+    const jitterRot = Math.sin(elapsed.current * 70) * 0.02 * decay;
+
+    groupRef.current.position.set(rattleX, jumpY, rattleZ);
+    groupRef.current.rotation.set(jitterRot * 0.5, jitterRot, 0);
+  });
+
+  return <group ref={groupRef}>{children}</group>;
 }
 
 function TurnSeatMarker({

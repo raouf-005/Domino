@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -63,8 +63,24 @@ const MODES: {
 ];
 
 const DIFFICULTIES: AIDifficulty[] = ["easy", "medium", "hard"];
+const ROOM_CODE_PATTERN = /^[A-Z0-9]{4,10}$/;
 
-export default function LoginScreen() {
+function normalizePlayerName(value: string) {
+  return value.replace(/\s+/g, " ").slice(0, 20);
+}
+
+function sanitizeRoomCode(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 10);
+}
+
+interface LoginProps {
+  onOpenSettings?: () => void;
+}
+
+export default function LoginScreen({ onOpenSettings }: LoginProps) {
   const {
     playerName,
     setPlayerName,
@@ -120,7 +136,36 @@ export default function LoginScreen() {
     ],
   }));
 
-  const isDisabled = !playerName.trim() || !gameId.trim();
+  const normalizedName = useMemo(() => playerName.trim(), [playerName]);
+  const normalizedRoomCode = useMemo(() => gameId.trim(), [gameId]);
+
+  const nameValid = normalizedName.length >= 2;
+  const roomCodeValid = ROOM_CODE_PATTERN.test(normalizedRoomCode);
+  const canJoin = nameValid && roomCodeValid;
+
+  const showNameError = normalizedName.length > 0 && !nameValid;
+  const showRoomCodeError = normalizedRoomCode.length > 0 && !roomCodeValid;
+
+  const statusLabel = !nameValid
+    ? "Name must be at least 2 characters"
+    : !roomCodeValid
+      ? "Room code must be 4–10 letters/numbers"
+      : "Ready to join";
+
+  const statusToneStyle = canJoin ? styles.formStatusOk : styles.formStatusWarn;
+
+  const handleNameChange = (value: string) => {
+    setPlayerName(normalizePlayerName(value));
+  };
+
+  const handleRoomCodeChange = (value: string) => {
+    setGameId(sanitizeRoomCode(value));
+  };
+
+  const handleJoin = () => {
+    if (!canJoin) return;
+    joinGame();
+  };
 
   return (
     <LinearGradient
@@ -128,6 +173,18 @@ export default function LoginScreen() {
       style={styles.container}
     >
       <AnimatedBackground />
+
+      {/* Settings button */}
+      {onOpenSettings && (
+        <TouchableOpacity
+          onPress={onOpenSettings}
+          activeOpacity={0.7}
+          style={styles.settingsPill}
+        >
+          <Text style={styles.settingsIcon}>⚙️</Text>
+          <Text style={styles.settingsText}>Settings</Text>
+        </TouchableOpacity>
+      )}
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -277,11 +334,16 @@ export default function LoginScreen() {
             <View style={styles.inputRow}>
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>YOUR NAME</Text>
-                <View style={styles.inputWrapper}>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    showNameError && styles.inputWrapperError,
+                  ]}
+                >
                   <Text style={styles.inputIcon}>👤</Text>
                   <TextInput
                     value={playerName}
-                    onChangeText={setPlayerName}
+                    onChangeText={handleNameChange}
                     placeholder="Enter name"
                     placeholderTextColor={Colors.white20}
                     style={styles.input}
@@ -289,14 +351,24 @@ export default function LoginScreen() {
                     autoCapitalize="words"
                   />
                 </View>
+                <Text style={styles.fieldHint}>
+                  {showNameError
+                    ? "Use at least 2 characters"
+                    : "2–20 characters"}
+                </Text>
               </View>
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>ROOM CODE</Text>
-                <View style={styles.inputWrapper}>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    showRoomCodeError && styles.inputWrapperError,
+                  ]}
+                >
                   <Text style={styles.inputIcon}>🏠</Text>
                   <TextInput
                     value={gameId}
-                    onChangeText={(t) => setGameId(t.toUpperCase())}
+                    onChangeText={handleRoomCodeChange}
                     placeholder="GAME1"
                     placeholderTextColor={Colors.white20}
                     style={[styles.input, styles.monoInput]}
@@ -304,7 +376,16 @@ export default function LoginScreen() {
                     autoCapitalize="characters"
                   />
                 </View>
+                <Text style={styles.fieldHint}>
+                  {showRoomCodeError
+                    ? "Use 4–10 letters/numbers only"
+                    : "Example: GAME1"}
+                </Text>
               </View>
+            </View>
+
+            <View style={[styles.formStatusPill, statusToneStyle]}>
+              <Text style={styles.formStatusText}>{statusLabel}</Text>
             </View>
 
             {/* Team */}
@@ -361,28 +442,25 @@ export default function LoginScreen() {
             {/* Join Button */}
             <Animated.View entering={SlideInDown.duration(400).delay(600)}>
               <TouchableOpacity
-                onPress={joinGame}
-                disabled={isDisabled}
+                onPress={handleJoin}
+                disabled={!canJoin}
                 activeOpacity={0.8}
               >
                 <View style={styles.joinBtnWrap}>
                   <LinearGradient
                     colors={
-                      isDisabled
+                      !canJoin
                         ? ["#374151", "#1f2937"]
                         : [Colors.emerald, Colors.emeraldDark]
                     }
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={[
-                      styles.joinBtn,
-                      isDisabled && styles.joinBtnDisabled,
-                    ]}
+                    style={[styles.joinBtn, !canJoin && styles.joinBtnDisabled]}
                   >
                     <Text
                       style={[
                         styles.joinBtnText,
-                        isDisabled && { color: Colors.white40 },
+                        !canJoin && { color: Colors.white40 },
                       ]}
                     >
                       {gameMode === "multiplayer"
@@ -390,7 +468,7 @@ export default function LoginScreen() {
                         : "🚀 Start Game"}
                     </Text>
                   </LinearGradient>
-                  {!isDisabled && <View style={styles.joinGlow} />}
+                  {canJoin && <View style={styles.joinGlow} />}
                 </View>
               </TouchableOpacity>
             </Animated.View>
@@ -407,6 +485,23 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  settingsPill: {
+    position: "absolute",
+    top: Platform.OS === "android" ? 36 : 52,
+    right: 16,
+    zIndex: 100,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  settingsIcon: { fontSize: 18 },
+  settingsText: { color: "#e2e8f0", fontSize: 14, fontWeight: "600" },
   flex: { flex: 1 },
   scroll: {
     flexGrow: 1,
@@ -623,6 +718,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingLeft: 12,
   },
+  inputWrapperError: {
+    borderColor: "rgba(248,113,113,0.8)",
+    backgroundColor: "rgba(127,29,29,0.25)",
+  },
   inputIcon: {
     fontSize: 16,
     marginRight: 4,
@@ -637,6 +736,32 @@ const styles = StyleSheet.create({
   monoInput: {
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     letterSpacing: 2,
+  },
+  fieldHint: {
+    color: Colors.white40,
+    fontSize: 11,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  formStatusPill: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  formStatusWarn: {
+    backgroundColor: "rgba(234,179,8,0.1)",
+    borderColor: "rgba(234,179,8,0.25)",
+  },
+  formStatusOk: {
+    backgroundColor: "rgba(16,185,129,0.12)",
+    borderColor: "rgba(16,185,129,0.3)",
+  },
+  formStatusText: {
+    color: Colors.white80,
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   teamRow: {
